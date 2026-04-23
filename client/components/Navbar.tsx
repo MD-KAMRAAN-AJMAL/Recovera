@@ -1,10 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
+import { useSession, signOut, signIn } from "next-auth/react";
 
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
+  const { data: session, status } = useSession();
 
   useEffect(() => {
     const handleScroll = () => {
@@ -31,19 +34,30 @@ export default function Navbar() {
           </div>
 
           <nav className="hidden md:flex gap-6">
-            <a href="#" className="text-sm font-medium text-zinc-400 hover:text-white transition-colors">Products</a>
-            <a href="#" className="text-sm font-medium text-zinc-400 hover:text-white transition-colors">Enterprise</a>
-            <a href="#" className="text-sm font-medium text-zinc-400 hover:text-white transition-colors">Customers</a>
+            <Link href="#" className="text-sm font-medium text-zinc-400 hover:text-white transition-colors">Products</Link>
+            <Link href="#" className="text-sm font-medium text-zinc-400 hover:text-white transition-colors">Enterprise</Link>
+            <Link href="#" className="text-sm font-medium text-zinc-400 hover:text-white transition-colors">Customers</Link>
           </nav>
         </div>
 
         <div className="flex items-center gap-4">
-          <a href="#" className="hidden sm:block text-sm font-medium text-zinc-300 hover:text-white transition-colors pl-2">
-            Log in
-          </a>
-          <a href="#" className="hidden sm:flex items-center justify-center px-4 py-1.5 text-sm font-medium text-black bg-white rounded-md hover:bg-zinc-200 transition-all active:scale-95 shadow-sm">
-            Sign up
-          </a>
+          {status === "authenticated" ? (
+            <>
+              <span className="text-sm font-medium text-zinc-300">{session?.user?.name}</span>
+              <button
+                onClick={() => signOut()}
+                className="hidden sm:flex items-center justify-center px-4 py-1.5 text-sm font-medium text-white bg-zinc-800 rounded-md hover:bg-zinc-700 transition-all active:scale-95 shadow-sm"
+              >
+                Sign out
+              </button>
+            </>
+          ) : (
+            <>
+              <button onClick={() => signIn('github')} className="hidden sm:block text-sm font-medium text-zinc-300 hover:text-white transition-colors pl-2">
+                Login / SignUp
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>
