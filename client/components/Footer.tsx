@@ -1,3 +1,4 @@
+import Link from "next/link";
 export default function Footer() {
   return (
     <footer className="bg-black pt-20 pb-10 border-t border-white/[0.05]">
@@ -19,30 +20,30 @@ export default function Footer() {
           <div>
             <h4 className="font-medium text-white mb-4 text-sm tracking-tight">Product</h4>
             <ul className="space-y-3 text-sm font-light text-zinc-500">
-              <li><a href="#" className="hover:text-white transition-colors">Features</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Integrations</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Pricing</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Changelog</a></li>
+              <li><Link href="#" className="hover:text-white transition-colors">Features</Link></li>
+              <li><Link href="#" className="hover:text-white transition-colors">Integrations</Link></li>
+              <li><Link href="#" className="hover:text-white transition-colors">Pricing</Link></li>
+              <li><Link href="#" className="hover:text-white transition-colors">Changelog</Link></li>
             </ul>
           </div>
           
           <div>
             <h4 className="font-medium text-white mb-4 text-sm tracking-tight">Resources</h4>
             <ul className="space-y-3 text-sm font-light text-zinc-500">
-              <li><a href="#" className="hover:text-white transition-colors">Documentation</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Blog</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">API Reference</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Community</a></li>
+              <li><Link href="#" className="hover:text-white transition-colors">Documentation</Link></li>
+              <li><Link href="#" className="hover:text-white transition-colors">Blog</Link></li>
+              <li><Link href="#" className="hover:text-white transition-colors">API Reference</Link></li>
+              <li><Link href="#" className="hover:text-white transition-colors">Community</Link></li>
             </ul>
           </div>
           
           <div>
             <h4 className="font-medium text-white mb-4 text-sm tracking-tight">Company</h4>
             <ul className="space-y-3 text-sm font-light text-zinc-500">
-              <li><a href="#" className="hover:text-white transition-colors">About</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Careers</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Legal</a></li>
-              <li><a href="#" className="hover:text-white transition-colors">Contact</a></li>
+              <li><Link href="#" className="hover:text-white transition-colors">About</Link></li>
+              <li><Link href="#" className="hover:text-white transition-colors">Careers</Link></li>
+              <li><Link href="#" className="hover:text-white transition-colors">Legal</Link></li>
+              <li><Link href="#" className="hover:text-white transition-colors">Contact</Link></li>
             </ul>
           </div>
         </div>

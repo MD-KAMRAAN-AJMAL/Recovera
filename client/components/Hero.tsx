@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { ChevronRight } from "lucide-react";
 
@@ -52,13 +53,13 @@ export default function Hero() {
           transition={{ duration: 0.8, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
           className="flex flex-col sm:flex-row items-center justify-center gap-4 w-full sm:w-auto"
         >
-          <a href="#" className="group relative flex items-center justify-center gap-2 px-6 py-3 text-sm font-medium text-black bg-white rounded-full transition-all active:scale-95 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)] hover:shadow-[0_0_60px_-15px_rgba(255,255,255,0.5)]">
+          <Link href="#" className="group relative flex items-center justify-center gap-2 px-6 py-3 text-sm font-medium text-black bg-white rounded-full transition-all active:scale-95 shadow-[0_0_40px_-10px_rgba(255,255,255,0.3)] hover:shadow-[0_0_60px_-15px_rgba(255,255,255,0.5)]">
             Start building
             <ChevronRight className="w-4 h-4 text-zinc-500 group-hover:translate-x-0.5 group-hover:text-black transition-all" />
-          </a>
-          <a href="#" className="group flex items-center justify-center px-6 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-full hover:bg-white hover:text-black transition-all active:scale-95 backdrop-blur-md">
+          </Link>
+          <Link href="#" className="group flex items-center justify-center px-6 py-3 text-sm font-medium text-white bg-transparent border border-white rounded-full hover:bg-white hover:text-black transition-all active:scale-95 backdrop-blur-md">
             Read Doc
-          </a>
+          </Link>
         </motion.div>
       </div>
 

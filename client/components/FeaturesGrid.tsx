@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Zap, GitMerge, LineChart, Code2, ShieldAlert, CloudCog, ArrowRight } from "lucide-react";
 
 export default function FeaturesGrid() {
@@ -72,9 +73,9 @@ export default function FeaturesGrid() {
               <p className="text-zinc-400 font-light leading-relaxed mb-6">
                 Ingests data from Datadog, AWS Cloudwatch, and Prometheus. Eliminating the need to switch between dashboards dynamically over the stack.
               </p>
-              <a href="#" className="inline-flex items-center text-sm font-medium text-white hover:text-zinc-300 transition-colors">
+              <Link href="#" className="inline-flex items-center text-sm font-medium text-white hover:text-zinc-300 transition-colors">
                 View integrations <ArrowRight size={14} className="ml-1" />
-              </a>
+              </Link>
             </div>
             
             {/* Abstract visual */}
