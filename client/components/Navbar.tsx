@@ -44,6 +44,7 @@ export default function Navbar() {
           {status === "authenticated" ? (
             <>
               <span className="text-sm font-medium text-zinc-300">{session?.user?.name}</span>
+              <Link href={"/dashboard"} className="hidden sm:flex items-center justify-center px-4 py-1.5 text-sm font-medium text-white bg-zinc-800 rounded-md hover:bg-zinc-700 transition-all active:scale-95 shadow-sm">Dashboard</Link>
               <button
                 onClick={() => signOut()}
                 className="hidden sm:flex items-center justify-center px-4 py-1.5 text-sm font-medium text-white bg-zinc-800 rounded-md hover:bg-zinc-700 transition-all active:scale-95 shadow-sm"
@@ -53,8 +54,8 @@ export default function Navbar() {
             </>
           ) : (
             <>
-              <button onClick={() => signIn('github')} className="hidden sm:block text-sm font-medium text-zinc-300 hover:text-white transition-colors pl-2">
-                Login / SignUp
+              <button onClick={() => signIn('github', { callbackUrl: '/dashboard' })} className="hidden sm:flex items-center justify-center px-4 py-1.5 text-sm font-medium text-black bg-white rounded-md hover:bg-zinc-200 transition-all active:scale-95 shadow-sm">
+                Login with Github
               </button>
             </>
           )}
