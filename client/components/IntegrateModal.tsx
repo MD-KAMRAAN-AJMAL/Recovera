@@ -1,0 +1,462 @@
+"use client";
+
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  X, Shield, Eye, EyeOff, Cloud, KeyRound, MapPin,
+  AlertTriangle, Loader2, Check, Copy, ExternalLink, Info
+} from "lucide-react";
+
+interface IntegrateModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+type Step = "credentials" | "validating" | "success" | "error";
+
+const AWS_REGIONS = [
+  "us-east-1", "us-east-2", "us-west-1", "us-west-2",
+  "eu-west-1", "eu-west-2", "eu-central-1",
+  "ap-south-1", "ap-southeast-1", "ap-northeast-1",
+];
+
+const REQUIRED_POLICY = `{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:PutBucketPolicy",
+        "s3:PutEncryptionConfiguration",
+        "s3:GetObject",
+        "s3:ListBucket",
+        "logs:DescribeLogGroups",
+        "logs:CreateExportTask",
+        "sts:GetCallerIdentity"
+      ],
+      "Resource": "*"
+    }
+  ]
+}`;
+
+export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps) {
+  const [step, setStep] = useState<Step>("credentials");
+  const [showSecret, setShowSecret] = useState(false);
+  const [showPolicy, setShowPolicy] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  const [form, setForm] = useState({
+    label: "",
+    accessKeyId: "",
+    secretAccessKey: "",
+    region: "us-east-1",
+  });
+
+  const isFormValid =
+    form.accessKeyId.trim().length > 0 &&
+    form.secretAccessKey.trim().length > 0;
+
+  const handleCopyPolicy = () => {
+    navigator.clipboard.writeText(REQUIRED_POLICY);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleSubmit = async () => {
+    if (!isFormValid) return;
+
+    setStep("validating");
+
+    try {
+      const res = await fetch("/api/integration/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: "aws",
+          label: form.label || "My AWS Account",
+          accessKeyId: form.accessKeyId,
+          secretAccessKey: form.secretAccessKey,
+          region: form.region,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMessage(data.error || "Failed to validate credentials.");
+        setStep("error");
+        return;
+      }
+
+      setStep("success");
+    } catch (err) {
+      setErrorMessage("Network error. Please check your connection and try again.");
+      setStep("error");
+    }
+  };
+
+  const handleClose = () => {
+    setStep("credentials");
+    setForm({ label: "", accessKeyId: "", secretAccessKey: "", region: "us-east-1" });
+    setShowSecret(false);
+    setShowPolicy(false);
+    setErrorMessage("");
+    onClose();
+  };
+
+  return (
+    <AnimatePresence>
+      {isOpen && (
+        <>
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            onClick={handleClose}
+            className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm"
+          />
+
+          {/* Modal */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.96, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.96, y: 12 }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          >
+            <div
+              className="w-full max-w-lg bg-zinc-950 border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-white/8">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500/20 to-amber-500/10 border border-orange-500/20 flex items-center justify-center">
+                    <Cloud className="w-4.5 h-4.5 text-orange-400" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-semibold text-white">Connect AWS Account</h2>
+                    <p className="text-xs text-zinc-500">Provide IAM credentials to enable monitoring</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleClose}
+                  className="p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+                >
+                  <X className="w-4 h-4 text-zinc-500" />
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="px-6 py-5">
+                <AnimatePresence mode="wait">
+
+                  {/* ─── Step: Credentials Form ─── */}
+                  {step === "credentials" && (
+                    <motion.div
+                      key="credentials"
+                      initial={{ opacity: 0, x: -10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 10 }}
+                      transition={{ duration: 0.2 }}
+                      className="space-y-4"
+                    >
+                      {/* Security Notice */}
+                      <div className="flex items-start gap-2.5 bg-blue-500/5 border border-blue-500/15 rounded-lg px-3.5 py-3">
+                        <Shield className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-xs text-blue-300 font-medium">End-to-end encrypted</p>
+                          <p className="text-[11px] text-blue-400/60 mt-0.5 leading-relaxed">
+                            Your credentials are encrypted with AES-256-CBC before being stored. They are never logged or exposed.
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Label */}
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                          Label <span className="text-zinc-600">(optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g., Production AWS"
+                          value={form.label}
+                          onChange={(e) => setForm({ ...form, label: e.target.value })}
+                          className="w-full bg-zinc-900 border border-white/10 text-white text-sm rounded-lg px-3.5 py-2.5 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-white/20 transition-all"
+                        />
+                      </div>
+
+                      {/* Access Key ID */}
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                          Access Key ID <span className="text-red-400">*</span>
+                        </label>
+                        <div className="relative">
+                          <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                          <input
+                            type="text"
+                            placeholder="AKIAIOSFODNN7EXAMPLE"
+                            value={form.accessKeyId}
+                            onChange={(e) => setForm({ ...form, accessKeyId: e.target.value })}
+                            className="w-full bg-zinc-900 border border-white/10 text-white text-sm rounded-lg pl-10 pr-3.5 py-2.5 placeholder:text-zinc-600 font-mono focus:outline-none focus:ring-1 focus:ring-white/20 transition-all"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Secret Access Key */}
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                          Secret Access Key <span className="text-red-400">*</span>
+                        </label>
+                        <div className="relative">
+                          <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                          <input
+                            type={showSecret ? "text" : "password"}
+                            placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+                            value={form.secretAccessKey}
+                            onChange={(e) => setForm({ ...form, secretAccessKey: e.target.value })}
+                            className="w-full bg-zinc-900 border border-white/10 text-white text-sm rounded-lg pl-10 pr-10 py-2.5 placeholder:text-zinc-600 font-mono focus:outline-none focus:ring-1 focus:ring-white/20 transition-all"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowSecret(!showSecret)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 hover:bg-white/5 rounded transition-colors"
+                          >
+                            {showSecret
+                              ? <EyeOff className="w-4 h-4 text-zinc-500" />
+                              : <Eye className="w-4 h-4 text-zinc-500" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Region */}
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                          Default Region
+                        </label>
+                        <div className="relative">
+                          <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                          <select
+                            value={form.region}
+                            onChange={(e) => setForm({ ...form, region: e.target.value })}
+                            className="w-full bg-zinc-900 border border-white/10 text-white text-sm rounded-lg pl-10 pr-3.5 py-2.5 appearance-none focus:outline-none focus:ring-1 focus:ring-white/20 transition-all cursor-pointer"
+                          >
+                            {AWS_REGIONS.map((r) => (
+                              <option key={r} value={r} className="bg-zinc-900">
+                                {r}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* IAM Policy Accordion */}
+                      <div className="border border-white/8 rounded-lg overflow-hidden">
+                        <button
+                          onClick={() => setShowPolicy(!showPolicy)}
+                          className="w-full flex items-center justify-between px-3.5 py-2.5 hover:bg-white/[0.02] transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Info className="w-3.5 h-3.5 text-zinc-500" />
+                            <span className="text-xs text-zinc-400">Required IAM Policy</span>
+                          </div>
+                          <motion.span
+                            animate={{ rotate: showPolicy ? 180 : 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="text-zinc-500 text-xs"
+                          >
+                            ▾
+                          </motion.span>
+                        </button>
+
+                        <AnimatePresence>
+                          {showPolicy && (
+                            <motion.div
+                              initial={{ height: 0, opacity: 0 }}
+                              animate={{ height: "auto", opacity: 1 }}
+                              exit={{ height: 0, opacity: 0 }}
+                              transition={{ duration: 0.25 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="px-3.5 pb-3 border-t border-white/5">
+                                <div className="relative mt-3">
+                                  <pre className="bg-zinc-900/80 border border-white/5 rounded-lg p-3 text-[11px] text-zinc-400 font-mono overflow-x-auto leading-relaxed max-h-40 overflow-y-auto">
+                                    {REQUIRED_POLICY}
+                                  </pre>
+                                  <button
+                                    onClick={handleCopyPolicy}
+                                    className="absolute top-2 right-2 p-1.5 rounded-md bg-zinc-800 border border-white/10 hover:bg-zinc-700 transition-colors"
+                                  >
+                                    {copied
+                                      ? <Check className="w-3 h-3 text-green-400" />
+                                      : <Copy className="w-3 h-3 text-zinc-400" />}
+                                  </button>
+                                </div>
+                                <a
+                                  href="https://docs.aws.amazon.com/IAM/latest/UserGuide/id_users_create.html"
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1 text-[11px] text-blue-400/70 hover:text-blue-400 mt-2 transition-colors"
+                                >
+                                  How to create an IAM user
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* ─── Step: Validating ─── */}
+                  {step === "validating" && (
+                    <motion.div
+                      key="validating"
+                      initial={{ opacity: 0, scale: 0.98 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.98 }}
+                      className="flex flex-col items-center justify-center py-12 gap-4"
+                    >
+                      <div className="relative">
+                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-orange-500/10 to-amber-500/5 border border-orange-500/20 flex items-center justify-center">
+                          <Cloud className="w-7 h-7 text-orange-400" />
+                        </div>
+                        <motion.div
+                          className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-zinc-950 border border-white/10 flex items-center justify-center"
+                          animate={{ rotate: 360 }}
+                          transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}
+                        >
+                          <Loader2 className="w-3.5 h-3.5 text-orange-400" />
+                        </motion.div>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-medium text-white">Validating credentials…</p>
+                        <p className="text-xs text-zinc-500 mt-1">Connecting to AWS STS to verify your access keys</p>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* ─── Step: Success ─── */}
+                  {step === "success" && (
+                    <motion.div
+                      key="success"
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="flex flex-col items-center justify-center py-12 gap-4"
+                    >
+                      <motion.div
+                        initial={{ scale: 0 }}
+                        animate={{ scale: 1 }}
+                        transition={{ type: "spring", stiffness: 300, damping: 15, delay: 0.1 }}
+                        className="w-16 h-16 rounded-2xl bg-green-500/10 border border-green-500/20 flex items-center justify-center"
+                      >
+                        <Check className="w-7 h-7 text-green-400" />
+                      </motion.div>
+                      <div className="text-center">
+                        <p className="text-sm font-medium text-white">AWS Connected Successfully</p>
+                        <p className="text-xs text-zinc-500 mt-1 max-w-xs leading-relaxed">
+                          Your credentials have been encrypted and saved. AutoSRE is now setting up log ingestion from CloudWatch.
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* ─── Step: Error ─── */}
+                  {step === "error" && (
+                    <motion.div
+                      key="error"
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="flex flex-col items-center justify-center py-12 gap-4"
+                    >
+                      <div className="w-16 h-16 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                        <AlertTriangle className="w-7 h-7 text-red-400" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-medium text-white">Connection Failed</p>
+                        <p className="text-xs text-red-400/70 mt-1 max-w-xs leading-relaxed">
+                          {errorMessage}
+                        </p>
+                      </div>
+                    </motion.div>
+                  )}
+
+                </AnimatePresence>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 border-t border-white/8 flex items-center justify-between">
+                {step === "credentials" && (
+                  <>
+                    <p className="text-[11px] text-zinc-600 flex items-center gap-1">
+                      <Shield className="w-3 h-3" />
+                      AES-256-CBC encrypted storage
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={handleClose}
+                        className="px-4 py-2 text-xs text-zinc-400 hover:text-white border border-white/10 rounded-lg hover:bg-white/5 transition-all"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleSubmit}
+                        disabled={!isFormValid}
+                        className={`px-5 py-2 text-xs font-medium rounded-lg transition-all active:scale-95 ${
+                          isFormValid
+                            ? "bg-white text-black hover:bg-zinc-100 shadow-sm"
+                            : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                        }`}
+                      >
+                        Connect AWS
+                      </button>
+                    </div>
+                  </>
+                )}
+
+                {step === "validating" && (
+                  <p className="text-[11px] text-zinc-600 mx-auto">
+                    This usually takes a few seconds…
+                  </p>
+                )}
+
+                {step === "success" && (
+                  <button
+                    onClick={handleClose}
+                    className="mx-auto px-6 py-2 bg-white text-black text-xs font-medium rounded-lg hover:bg-zinc-100 transition-all active:scale-95 shadow-sm"
+                  >
+                    Done
+                  </button>
+                )}
+
+                {step === "error" && (
+                  <div className="flex items-center gap-2 mx-auto">
+                    <button
+                      onClick={handleClose}
+                      className="px-4 py-2 text-xs text-zinc-400 hover:text-white border border-white/10 rounded-lg hover:bg-white/5 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => setStep("credentials")}
+                      className="px-5 py-2 bg-white text-black text-xs font-medium rounded-lg hover:bg-zinc-100 transition-all active:scale-95 shadow-sm"
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
