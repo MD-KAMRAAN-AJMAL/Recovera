@@ -100,3 +100,64 @@ If you only have GitHub login, you might wonder why we don't just put everything
 1. **Security & Separation of Concerns**: The `User` table holds public/profile data, while `Account` securely isolates sensitive OAuth tokens (`access_token`). 
 2. **Device Management**: The `Session` table allows a user to be logged in on their phone and laptop simultaneously, and logging out on one device won't affect the other.
 3. **Future-Proofing**: This structure is NextAuth's industry standard. If you ever decide to add Google or Email login later, your database schema won't need to change—you'd just add a new row in the `Account` table for that user.
+
+---
+
+## How Data is Saved During Login (NextAuth + Prisma)
+
+The beauty of using NextAuth alongside Prisma is that **you do not need to manually write SQL or Prisma queries to create the user**. 
+
+By passing the `PrismaAdapter` into your NextAuth configuration, NextAuth automatically handles the entire database insertion process. 
+
+### The Workflow:
+1. **User Clicks Login**: The user clicks "Sign in with GitHub" and authorizes your application.
+2. **GitHub Returns Data**: GitHub sends back the user's profile (Name, Email, Avatar) and their OAuth tokens (`access_token`).
+3. **PrismaAdapter Takes Over**:
+   - NextAuth checks if a `User` with that email already exists in the database.
+   - **If it doesn't exist**: It creates a new `User` row and links a new `Account` row containing the GitHub tokens.
+   - **If it does exist**: It logs them in and just updates any changed tokens in the `Account` table.
+4. **Session Created**: Finally, it creates a new active `Session` in the database and sets the session cookie in the user's browser.
+
+### Required Code (`app/api/auth/[...nextauth]/route.ts`)
+To make this happen, your NextAuth config simply needs the adapter set up like this:
+
+```typescript
+import NextAuth from "next-auth"
+import GithubProvider from "next-auth/providers/github"
+import { PrismaAdapter } from "@next-auth/prisma-adapter"
+import prisma from "@/lib/prisma" // Your instantiated Prisma Client
+
+export const authOptions = {
+  // 1. Tell NextAuth to use Prisma to store data
+  adapter: PrismaAdapter(prisma), 
+  
+  // 2. Configure the GitHub Provider
+  providers: [
+    GithubProvider({
+      clientId: process.env.GITHUB_ID!,
+      clientSecret: process.env.GITHUB_SECRET!,
+    }),
+  ],
+}
+
+const handler = NextAuth(authOptions)
+export { handler as GET, handler as POST }
+```
+
+As long as the adapter is configured, user creation and data population happen **100% automatically** upon a successful login.
+
+---
+
+## 📝 A Note on the Session Table and JWTs
+
+In our specific configuration, we have explicitly told NextAuth to use **JSON Web Tokens (JWTs)** instead of database sessions by adding `session: { strategy: "jwt" }` to our `authOptions`.
+
+### What does this mean?
+Because we are using the JWT strategy, the `Session` table in your Prisma database **will remain completely empty**. NextAuth will store the session data entirely inside an encrypted cookie in the user's browser instead of writing rows to the database.
+
+### Should we delete the `Session` model from `schema.prisma`?
+**No, it is highly recommended to leave it there.**
+
+1. **Adapter Requirements**: The NextAuth Prisma Adapter officially expects the `Session` model to exist in the schema. Even if it doesn't actively write to it when using JWTs, removing it can sometimes cause TypeScript or validation errors.
+2. **Zero Cost**: It costs nothing to have an empty table in your Postgres database.
+3. **Future Flexibility**: If you ever change your mind and decide you want to track active devices (for example, to add a "Log out of all other devices" feature), you can easily switch back to database sessions because the table is already set up and ready to go!
