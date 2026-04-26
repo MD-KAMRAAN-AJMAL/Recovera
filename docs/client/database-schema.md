@@ -161,3 +161,116 @@ Because we are using the JWT strategy, the `Session` table in your Prisma databa
 1. **Adapter Requirements**: The NextAuth Prisma Adapter officially expects the `Session` model to exist in the schema. Even if it doesn't actively write to it when using JWTs, removing it can sometimes cause TypeScript or validation errors.
 2. **Zero Cost**: It costs nothing to have an empty table in your Postgres database.
 3. **Future Flexibility**: If you ever change your mind and decide you want to track active devices (for example, to add a "Log out of all other devices" feature), you can easily switch back to database sessions because the table is already set up and ready to go!
+
+---
+
+## 🔐 Storing IAM / Cloud Credentials in the Database
+
+For AutoSRE AI to detect cloud misconfigurations (open S3 buckets, bad IAM policies, etc.), users will need to connect their cloud accounts (AWS, GCP, Azure). This means we need to **securely store their IAM credentials** in our database.
+
+### Why not just use `.env` variables?
+Environment variables work for **your own** cloud account, but AutoSRE is a multi-user platform. Each user connects **their own** AWS/GCP account, so we need to store credentials **per user** in the database.
+
+### The Prisma Model
+
+```prisma
+model CloudCredential {
+  id              String   @id @default(cuid())
+  userId          String
+  provider        String   // "aws" | "gcp" | "azure"
+  label           String?  // User-friendly name, e.g., "My Production AWS"
+
+  // All sensitive fields are stored ENCRYPTED (via encrypt.ts)
+  accessKeyId     String   @db.Text  // Encrypted AWS Access Key ID
+  secretAccessKey String   @db.Text  // Encrypted AWS Secret Access Key
+  region          String?             // e.g., "us-east-1"
+  roleArn         String?  @db.Text  // Encrypted IAM Role ARN (for assume-role)
+  sessionToken    String?  @db.Text  // Encrypted temporary session token (STS)
+
+  isActive        Boolean  @default(true)
+  lastVerifiedAt  DateTime?          // Last time we confirmed creds are valid
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider, label])
+}
+```
+
+> **⚠️ CRITICAL:** The `accessKeyId`, `secretAccessKey`, `roleArn`, and `sessionToken` fields must **always** be encrypted before saving and decrypted only when needed. Never store plain-text IAM keys.
+
+### Fields Explained
+
+| Field | Purpose |
+|---|---|
+| `id` | Unique identifier for the credential record. |
+| `userId` | Links this credential to a specific user. |
+| `provider` | Which cloud platform — `"aws"`, `"gcp"`, or `"azure"`. |
+| `label` | A friendly name the user gives it (e.g., "Staging AWS", "Prod GCP"). |
+| `accessKeyId` | The AWS Access Key ID (or equivalent for GCP/Azure), **stored encrypted**. |
+| `secretAccessKey` | The AWS Secret Access Key, **stored encrypted**. This is the most sensitive field. |
+| `region` | Default cloud region for API calls (e.g., `us-east-1`). |
+| `roleArn` | An optional IAM Role ARN if the user wants us to use `AssumeRole` instead of direct keys. **Stored encrypted.** |
+| `sessionToken` | Temporary credentials from AWS STS. **Stored encrypted.** |
+| `isActive` | Whether this credential is currently being used for monitoring. |
+| `lastVerifiedAt` | Timestamp of the last time we successfully made an API call with these creds. Helps detect expired/revoked keys. |
+| `createdAt` / `updatedAt` | Standard timestamps. |
+
+### How Encryption Works (Using `encrypt.ts`)
+
+When a user submits their IAM credentials through the dashboard, the flow is:
+
+```
+User submits keys → API Route receives plain text → encrypt() → Save to DB
+                                                                      │
+User's cloud scan runs → Read from DB → decrypt() → Make AWS API call ←┘
+```
+
+**Saving credentials:**
+```typescript
+import { encrypt } from "@/lib/encrypt";
+import { prisma } from "@/lib/prisma";
+
+async function saveCredential(userId: string, data: any) {
+  return prisma.cloudCredential.create({
+    data: {
+      userId,
+      provider: data.provider,
+      label: data.label,
+      accessKeyId: encrypt(data.accessKeyId),         // Encrypted!
+      secretAccessKey: encrypt(data.secretAccessKey), // Encrypted!
+      region: data.region,
+      roleArn: data.roleArn ? encrypt(data.roleArn) : null,
+    },
+  });
+}
+```
+
+**Reading credentials (for cloud API calls):**
+```typescript
+import { decrypt } from "@/lib/encrypt";
+
+async function getCredential(credentialId: string) {
+  const cred = await prisma.cloudCredential.findUnique({
+    where: { id: credentialId },
+  });
+
+  if (!cred) throw new Error("Credential not found");
+
+  return {
+    accessKeyId: decrypt(cred.accessKeyId),         // Decrypted!
+    secretAccessKey: decrypt(cred.secretAccessKey), // Decrypted!
+    region: cred.region,
+    roleArn: cred.roleArn ? decrypt(cred.roleArn) : null,
+  };
+}
+```
+
+### Best Practices for IAM Credential Security
+
+1. **Least Privilege:** Always instruct users to create IAM keys with **read-only** permissions. AutoSRE only needs to *scan* for misconfigurations, not modify resources.
+2. **Prefer IAM Roles over Keys:** If possible, encourage users to provide a `roleArn` that we assume using STS, rather than long-lived access keys.
+3. **Periodic Verification:** Use the `lastVerifiedAt` field to periodically test that credentials are still valid. Notify the user if they are revoked or expired.
+4. **Never Log Credentials:** Ensure that decrypted credentials never appear in application logs, error messages, or API responses.
+5. **Rotate the Encryption Key:** If your `ENCRYPTION_KEY` in `.env` is ever compromised, you must re-encrypt all stored credentials with a new key.
