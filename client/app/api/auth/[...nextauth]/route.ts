@@ -2,7 +2,6 @@ import NextAuth, { AuthOptions } from "next-auth";
 import GithubProvider from "next-auth/providers/github";
 import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
-import { encrypt } from "@/lib/encrypt";
 
 declare module "next-auth" {
   interface Session {
@@ -16,24 +15,9 @@ declare module "next-auth/jwt" {
   }
 }
 
-const baseAdapter = PrismaAdapter(prisma);
-const customAdapter = {
-  ...baseAdapter,
-  linkAccount: async (account: any) => {
-    // 2. Intercept the account data and encrypt sensitive tokens before saving to DB
-    if (account.access_token) {
-      account.access_token = encrypt(account.access_token);
-    }
-    if (account.refresh_token) {
-      account.refresh_token = encrypt(account.refresh_token);
-    }
-    return baseAdapter.linkAccount!(account);
-  },
-};
-
 export const authOptions: AuthOptions = {
 
-  adapter: customAdapter as any,
+  adapter: PrismaAdapter(prisma),
   session: {
     strategy: "jwt",
   },
