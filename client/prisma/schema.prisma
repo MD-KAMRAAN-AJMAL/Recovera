@@ -60,7 +60,7 @@ model CloudCredential {
   provider         String
   label            String?
   accessKeyId      String        @db.Text
-  sercetAccesssKey String        @db.Text
+  secretAccessKey  String        @db.Text
   region           String
   roleArn          String?       @db.Text
   sessionToken     String?       @db.Text
