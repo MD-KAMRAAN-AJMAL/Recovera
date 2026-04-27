@@ -3,9 +3,16 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/app/api/auth/[...nextauth]/route";
 import { prisma } from "@/lib/prisma";
 import { encrypt } from "@/lib/encrypt";
-import { STSClient, GetCallerIdentityCommand } from "@aws-sdk/client-sts";
+import { validateCredentials } from "@/lib/aws/ValidateCredentials";
+import { createLogBucket } from "@/lib/aws/CreateS3Bucket";
+import { subscribeLogGroups } from "@/lib/aws/CreateCloudWatch";
+import { createFirehoseRoles } from "@/lib/aws/CreateIamRoles";
+import { createDeliveryStream } from "@/lib/aws/CreateFirehose";
 
 export async function POST(req: Request) {
+  // Track created resources for rollback logging on failure
+  const createdResources: string[] = [];
+
   try {
     const session = await getServerSession(authOptions);
 
@@ -20,29 +27,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // 1. Verify credentials with AWS STS
-    try {
-      const stsClient = new STSClient({
-        region,
-        credentials: {
-          accessKeyId,
-          secretAccessKey,
-        },
-      });
-
-      await stsClient.send(new GetCallerIdentityCommand({}));
-    } catch (err: any) {
-      console.error("AWS Validation Error:", err);
-      return NextResponse.json(
-        { error: "Invalid AWS credentials or insufficient permissions." },
-        { status: 400 }
-      );
-    }
-
-    // 2. Encrypt the secretAccessKey
+    // 1. Encrypt both credentials
+    const encryptedAccessKey = encrypt(accessKeyId);
     const encryptedSecret = encrypt(secretAccessKey);
 
-    // 3. Find the user
+    // 2. Find the user
     const user = await prisma.user.findUnique({
       where: { email: session.user.email },
     });
@@ -51,7 +40,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    await prisma.cloudCredential.upsert({
+    // 3. Save credential to DB
+    const credential = await prisma.cloudCredential.upsert({
       where: {
         userId_provider_label: {
           userId: user.id,
@@ -60,7 +50,7 @@ export async function POST(req: Request) {
         },
       },
       update: {
-        accessKeyId,
+        accessKeyId: encryptedAccessKey,
         secretAccessKey: encryptedSecret,
         region,
         isActive: true,
@@ -70,7 +60,7 @@ export async function POST(req: Request) {
         userId: user.id,
         provider: "aws",
         label: label || "My AWS Account",
-        accessKeyId,
+        accessKeyId: encryptedAccessKey,
         secretAccessKey: encryptedSecret,
         region,
         isActive: true,
@@ -78,9 +68,67 @@ export async function POST(req: Request) {
       },
     });
 
-    return NextResponse.json({ success: true });
+    // 4. Validate credentials with AWS STS
+    const identity = await validateCredentials(credential);
+
+    // 5. Create S3 bucket (for Long-Term Backup)
+    const bucketName = await createLogBucket(credential, user.id);
+    createdResources.push(`S3 Bucket: ${bucketName}`);
+
+    // 6. Create IAM Roles for Firehose & CloudWatch
+    const { firehoseRoleArn, cwRoleArn } = await createFirehoseRoles(credential, bucketName, identity.accountId, region);
+    createdResources.push(`Firehose IAM Role: ${firehoseRoleArn}`);
+    createdResources.push(`CloudWatch IAM Role: ${cwRoleArn}`);
+
+    // 7. Create Kinesis Data Firehose Stream
+    const ingestUrl = process.env.INGEST_API_URL;
+    if (!ingestUrl) {
+      throw new Error("INGEST_API_URL environment variable is not set.");
+    }
+    const firehoseArn = await createDeliveryStream(credential, user.id, firehoseRoleArn, bucketName, ingestUrl);
+    createdResources.push(`Firehose Stream: ${firehoseArn}`);
+
+    // 8. Subscribe CloudWatch log groups to Firehose
+    const logGroups = await subscribeLogGroups(credential, firehoseArn, cwRoleArn);
+
+    // 9. Save integration status to DB
+    await prisma.integration.upsert({
+      where: {
+        userId_provider: {
+          userId: user.id,
+          provider: "aws",
+        },
+      },
+      update: {
+        credentialId: credential.id,
+        s3BucketName: bucketName,
+        firehoseArn,
+        logGroups,
+        status: "active",
+        lastSyncAt: new Date(),
+      },
+      create: {
+        userId: user.id,
+        credentialId: credential.id,
+        provider: "aws",
+        s3BucketName: bucketName,
+        firehoseArn,
+        logGroups,
+        status: "active",
+        lastSyncAt: new Date(),
+      },
+    });
+
+    return NextResponse.json({ success: true, bucketName, logGroups });
   } catch (error: any) {
     console.error("Integration Setup Error:", error);
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    if (createdResources.length > 0) {
+      console.error("⚠️  Partial resources were created before failure. Manual cleanup may be required:");
+      createdResources.forEach(r => console.error(`   - ${r}`));
+    }
+    return NextResponse.json(
+      { error: "Failed to setup integration. Please check credentials and permissions." },
+      { status: 500 }
+    );
   }
 }
