@@ -27,12 +27,14 @@ const REQUIRED_POLICY = `{
       "Effect": "Allow",
       "Action": [
         "s3:CreateBucket",
-        "s3:PutBucketPolicy",
-        "s3:PutEncryptionConfiguration",
-        "s3:GetObject",
-        "s3:ListBucket",
+        "iam:CreateRole",
+        "iam:GetRole",
+        "iam:PutRolePolicy",
+        "iam:PassRole",
+        "firehose:CreateDeliveryStream",
+        "firehose:DescribeDeliveryStream",
         "logs:DescribeLogGroups",
-        "logs:CreateExportTask",
+        "logs:PutSubscriptionFilter",
         "sts:GetCallerIdentity"
       ],
       "Resource": "*"
