@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X, Shield, Eye, EyeOff, Cloud, KeyRound, MapPin,
@@ -100,6 +100,32 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
   const [suggestedMappings, setSuggestedMappings] = useState<SuggestedMapping[]>([]);
   const [githubRepos, setGithubRepos] = useState<string[]>([]);
   const [selectedMappings, setSelectedMappings] = useState<Record<string, string>>({}); // resourceId -> repoFullName
+
+  const [existingCreds, setExistingCreds] = useState<{ id: string; label: string; region: string } | null>(null);
+  const [showNewForm, setShowNewForm] = useState(true);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const checkExistingCredentials = async () => {
+      try {
+        const res = await fetch("/api/user/credentials");
+        const data = await res.json();
+        
+        const awsCreds = data.credentials?.[0];
+        
+        if (awsCreds) {
+          setExistingCreds(awsCreds);
+          setShowNewForm(false);
+        }
+      } catch (err) {
+        console.error("Error checking credentials:", err);
+      }
+    };
+
+    checkExistingCredentials();
+  }, [isOpen]);
+
 
   const [form, setForm] = useState({
     label: "",
@@ -225,6 +251,8 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
     setShowSecret(false);
     setShowPolicy(false);
     setErrorMessage("");
+    setExistingCreds(null);
+    setShowNewForm(true);
     onClose();
   };
 
@@ -289,8 +317,57 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
                       transition={{ duration: 0.2 }}
                       className="space-y-4"
                     >
-                      {/* Security Notice */}
-                      <div className="flex items-start gap-2.5 bg-blue-500/5 border border-blue-500/15 rounded-lg px-3.5 py-3">
+                      {/* Existing Credentials Option */}
+                      {existingCreds && !showNewForm && (
+                        <div className="mb-6">
+                          <label className="block text-xs font-medium text-zinc-400 mb-2">
+                            Saved Connection
+                          </label>
+                          <div className="group relative flex items-center justify-between p-3.5 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.04] transition-colors">
+                            <div className="flex items-center gap-3.5">
+                              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-500/10 to-amber-500/5 border border-orange-500/20 flex items-center justify-center">
+                                <Cloud className="w-4.5 h-4.5 text-orange-400" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-white">{existingCreds.label || "AWS Account"}</p>
+                                <p className="text-[11px] text-zinc-500 mt-0.5">Region: {existingCreds.region}</p>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setCredentialId(existingCreds.id);
+                                handleDiscover(existingCreds.id);
+                              }}
+                              className="px-3.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-xs font-medium transition-colors"
+                            >
+                              Connect
+                            </button>
+                          </div>
+                          
+                          {!showNewForm && (
+                            <div className="flex justify-center mt-6 mb-2">
+                              <button 
+                                type="button"
+                                onClick={() => setShowNewForm(true)}
+                                className="px-4 py-2 bg-zinc-900 border border-white/10 rounded-lg text-xs font-medium text-white hover:bg-zinc-800 transition-colors flex items-center gap-2 shadow-sm"
+                              >
+                                <span className="text-zinc-400">+</span> Add New Role
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {showNewForm && (
+                        <motion.div 
+                          initial={existingCreds ? { opacity: 0, height: 0 } : false} 
+                          animate={{ opacity: 1, height: 'auto' }}
+                          className="space-y-4 overflow-hidden"
+                        >
+                          {/* Security Notice */}
+                          <div className="flex items-start gap-2.5 bg-blue-500/5 border border-blue-500/15 rounded-lg px-3.5 py-3">
                         <Shield className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
                         <div>
                           <p className="text-xs text-blue-300 font-medium">End-to-end encrypted</p>
@@ -435,7 +512,9 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
                         </AnimatePresence>
                       </div>
                     </motion.div>
-                  )}
+                   )}
+                  </motion.div>
+                )}
 
                   {/* ─── Step: Discovering ─── */}
                   {step === "discovering" && (
@@ -614,8 +693,12 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
                 {step === "credentials" && (
                   <>
                     <p className="text-[11px] text-zinc-600 flex items-center gap-1">
-                      <Shield className="w-3 h-3" />
-                      AES-256-CBC encrypted storage
+                      {showNewForm && (
+                        <>
+                          <Shield className="w-3 h-3" />
+                          AES-256-CBC encrypted storage
+                        </>
+                      )}
                     </p>
                     <div className="flex items-center gap-2">
                       <button
@@ -624,16 +707,18 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
                       >
                         Cancel
                       </button>
-                      <button
-                        onClick={handleSubmit}
-                        disabled={!isFormValid}
-                        className={`px-5 py-2 text-xs font-medium rounded-lg transition-all active:scale-95 ${isFormValid
-                          ? "bg-white text-black hover:bg-zinc-100 shadow-sm"
-                          : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
-                          }`}
-                      >
-                        Connect AWS
-                      </button>
+                      {showNewForm && (
+                        <button
+                          onClick={handleSubmit}
+                          disabled={!isFormValid}
+                          className={`px-5 py-2 text-xs font-medium rounded-lg transition-all active:scale-95 ${isFormValid
+                            ? "bg-white text-black hover:bg-zinc-100 shadow-sm"
+                            : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                            }`}
+                        >
+                          Connect AWS
+                        </button>
+                      )}
                     </div>
                   </>
                 )}
