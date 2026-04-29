@@ -7,11 +7,16 @@ import {
   ArrowLeft, Activity, AlertCircle, CheckCircle2, 
   Clock, Server, Shield, Terminal, GitBranch, 
   Settings, ExternalLink, BarChart3, Search, 
-  MoreHorizontal, Play, CheckCircle
+  MoreHorizontal, Play, CheckCircle, Cloud
 } from "lucide-react";
+import InstanceSelectModal from "./InstanceSelectModal";
 
 export default function RepoDashboard({ repoName }: { repoName: string }) {
   const [activeTab, setActiveTab] = useState("Overview");
+  const [showInstanceModal, setShowInstanceModal] = useState(false);
+
+  // TODO: Replace with real credentialId from user's stored integration
+  const credentialId = null; // Will be fetched from DB when AWS is connected
 
   // Mock data for the timeline and issues
   const metrics = {
@@ -122,6 +127,13 @@ export default function RepoDashboard({ repoName }: { repoName: string }) {
           </div>
           
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowInstanceModal(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 text-blue-300 text-sm font-medium rounded-lg border border-blue-500/20 hover:border-blue-500/40 hover:from-blue-500/15 hover:to-cyan-500/15 transition-all active:scale-95"
+            >
+              <Cloud className="w-3.5 h-3.5" />
+              Connect Instance
+            </button>
             <button className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-sm font-medium transition-all flex items-center gap-2">
               <Settings className="w-4 h-4" />
               Settings
@@ -355,6 +367,14 @@ export default function RepoDashboard({ repoName }: { repoName: string }) {
           </motion.div>
         </div>
       )}
+      {/* Instance Select Modal */}
+      <InstanceSelectModal
+        isOpen={showInstanceModal}
+        onClose={() => setShowInstanceModal(false)}
+        repoName={repoName}
+        repoFullName={repoName}
+        credentialId={credentialId}
+      />
     </div>
   );
 }

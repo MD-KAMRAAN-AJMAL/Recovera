@@ -12,35 +12,82 @@ interface IntegrateModalProps {
   onClose: () => void;
 }
 
-type Step = "credentials" | "validating" | "success" | "error";
+type Step = "credentials" | "validating" | "discovering" | "mapping" | "success" | "error";
+
+const REQUIRED_POLICY = JSON.stringify({
+  Version: "2012-10-17",
+  Statement: [
+    {
+      Sid: "RecoveraDiscovery",
+      Effect: "Allow",
+      Action: [
+        "sts:GetCallerIdentity",
+        "ec2:DescribeInstances",
+        "ecs:ListClusters",
+        "ecs:ListServices",
+        "ecs:DescribeServices",
+        "eks:ListClusters",
+        "eks:DescribeCluster",
+        "ecr:DescribeRepositories",
+        "logs:DescribeLogGroups"
+      ],
+      Resource: "*"
+    },
+    {
+      Sid: "RecoveraInfrastructureProvisioning",
+      Effect: "Allow",
+      Action: [
+        "s3:CreateBucket",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:DeleteBucket",
+        "s3:ListBucket",
+        "firehose:CreateDeliveryStream",
+        "firehose:DeleteDeliveryStream",
+        "firehose:DescribeDeliveryStream",
+        "firehose:ListDeliveryStreams",
+        "logs:PutSubscriptionFilter",
+        "logs:DeleteSubscriptionFilter"
+      ],
+      Resource: "*"
+    },
+    {
+      Sid: "RecoveraIAMManagement",
+      Effect: "Allow",
+      Action: [
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRole",
+        "iam:PassRole"
+      ],
+      Resource: [
+        "arn:aws:iam::*:role/AutoSRE-*"
+      ]
+    }
+  ]
+}, null, 2);
 
 const AWS_REGIONS = [
   "us-east-1", "us-east-2", "us-west-1", "us-west-2",
-  "eu-west-1", "eu-west-2", "eu-central-1",
-  "ap-south-1", "ap-southeast-1", "ap-northeast-1",
+  "af-south-1", "ap-east-1", "ap-south-1", "ap-northeast-3",
+  "ap-northeast-2", "ap-southeast-1", "ap-southeast-2", "ap-northeast-1",
+  "ca-central-1", "eu-central-1", "eu-west-1", "eu-west-2",
+  "eu-south-1", "eu-west-3", "eu-north-1", "me-south-1",
+  "sa-east-1", "us-gov-east-1", "us-gov-west-1"
 ];
-
-const REQUIRED_POLICY = `{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "s3:CreateBucket",
-        "iam:CreateRole",
-        "iam:GetRole",
-        "iam:PutRolePolicy",
-        "iam:PassRole",
-        "firehose:CreateDeliveryStream",
-        "firehose:DescribeDeliveryStream",
-        "logs:DescribeLogGroups",
-        "logs:PutSubscriptionFilter",
-        "sts:GetCallerIdentity"
-      ],
-      "Resource": "*"
-    }
-  ]
-}`;
+interface SuggestedMapping {
+  resource: {
+    type: string;
+    id: string;
+    name: string;
+    logGroups: string[];
+    region: string;
+    cluster?: string;
+  };
+  bestMatch: string | null;
+  confidence: number;
+}
 
 export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps) {
   const [step, setStep] = useState<Step>("credentials");
@@ -48,6 +95,11 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
   const [showPolicy, setShowPolicy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const [credentialId, setCredentialId] = useState<string | null>(null);
+
+  const [suggestedMappings, setSuggestedMappings] = useState<SuggestedMapping[]>([]);
+  const [githubRepos, setGithubRepos] = useState<string[]>([]);
+  const [selectedMappings, setSelectedMappings] = useState<Record<string, string>>({}); // resourceId -> repoFullName
 
   const [form, setForm] = useState({
     label: "",
@@ -92,9 +144,77 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
         return;
       }
 
-      setStep("success");
+      setCredentialId(data.credentialId);
+      handleDiscover(data.credentialId);
     } catch (err) {
       setErrorMessage("Network error. Please check your connection and try again.");
+      setStep("error");
+    }
+  };
+
+  const handleDiscover = async (id: string) => {
+    setStep("discovering");
+    try {
+      const res = await fetch(`/api/integration/discover?credentialId=${id}`);
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMessage(data.error || "Failed to discover resources.");
+        setStep("error");
+        return;
+      }
+
+      setSuggestedMappings(data.mappings);
+      setGithubRepos(data.githubRepos);
+
+      // Initialize selected mappings with best matches
+      const initial: Record<string, string> = {};
+      data.mappings.forEach((m: SuggestedMapping) => {
+        if (m.bestMatch) initial[m.resource.id] = m.bestMatch;
+      });
+      setSelectedMappings(initial);
+
+      setStep("mapping");
+    } catch (err) {
+      setErrorMessage("Discovery failed. Please try again.");
+      setStep("error");
+    }
+  };
+
+  const handleSaveMappings = async () => {
+    if (!credentialId) return;
+
+    setStep("validating");
+    try {
+      const mappingsToSave = suggestedMappings.map(m => ({
+        resourceId: m.resource.id,
+        resourceType: m.resource.type,
+        resourceLabel: m.resource.name,
+        logGroupName: m.resource.logGroups[0] || "unknown",
+        repoFullName: selectedMappings[m.resource.id],
+        confidence: selectedMappings[m.resource.id] === m.bestMatch ? m.confidence : 1.0,
+        source: selectedMappings[m.resource.id] === m.bestMatch ? "auto" : "manual",
+      })).filter(m => m.repoFullName); // Only save those with a repo assigned
+
+      const res = await fetch("/api/integration/mappings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          credentialId,
+          mappings: mappingsToSave
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        setErrorMessage(data.error || "Failed to save mappings.");
+        setStep("error");
+        return;
+      }
+
+      setStep("success");
+    } catch (err) {
+      setErrorMessage("Failed to save mappings.");
       setStep("error");
     }
   };
@@ -114,6 +234,7 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
         <>
           {/* Backdrop */}
           <motion.div
+            key="integrate-backdrop"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -124,6 +245,7 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
 
           {/* Modal */}
           <motion.div
+            key="integrate-content"
             initial={{ opacity: 0, scale: 0.96, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.96, y: 12 }}
@@ -315,6 +437,100 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
                     </motion.div>
                   )}
 
+                  {/* ─── Step: Discovering ─── */}
+                  {step === "discovering" && (
+                    <motion.div
+                      key="discovering"
+                      initial={{ opacity: 0, scale: 0.98 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.98 }}
+                      className="flex flex-col items-center justify-center py-12 gap-4"
+                    >
+                      <div className="relative">
+                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500/10 to-cyan-500/5 border border-blue-500/20 flex items-center justify-center">
+                          <Eye className="w-7 h-7 text-blue-400" />
+                        </div>
+                        <motion.div
+                          className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-zinc-950 border border-white/10 flex items-center justify-center"
+                          animate={{ rotate: 360 }}
+                          transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}
+                        >
+                          <Loader2 className="w-3.5 h-3.5 text-blue-400" />
+                        </motion.div>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-medium text-white">Analyzing AWS Resources…</p>
+                        <p className="text-xs text-zinc-500 mt-1">Finding EC2, ECS, EKS and Lambda instances to monitor</p>
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* ─── Step: Mapping ─── */}
+                  {step === "mapping" && (
+                    <motion.div
+                      key="mapping"
+                      initial={{ opacity: 0, x: 10 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: -10 }}
+                      className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-medium text-zinc-400">Map Resources to Repositories</p>
+                        <span className="text-[10px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/20">
+                          {suggestedMappings.length} Found
+                        </span>
+                      </div>
+
+                      {suggestedMappings.length === 0 ? (
+                        <div className="text-center py-8 border border-dashed border-white/10 rounded-xl">
+                          <p className="text-xs text-zinc-500">No supported resources found in this region.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {suggestedMappings.map((m) => (
+                            <div key={m.resource.id} className="p-3 bg-zinc-900/50 border border-white/5 rounded-xl space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center border border-white/5">
+                                    {m.resource.type === "eks" && <Cloud className="w-4 h-4 text-orange-400" />}
+                                    {m.resource.type === "ecs" && <Cloud className="w-4 h-4 text-blue-400" />}
+                                    {m.resource.type === "ec2" && <Cloud className="w-4 h-4 text-zinc-400" />}
+                                    {m.resource.type === "lambda" && <Cloud className="w-4 h-4 text-amber-400" />}
+                                  </div>
+                                  <div>
+                                    <p className="text-xs font-medium text-white">{m.resource.name}</p>
+                                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider">{m.resource.type} • {m.resource.region}</p>
+                                  </div>
+                                </div>
+                                {m.confidence > 0.9 && !selectedMappings[m.resource.id] && (
+                                  <div className="flex items-center gap-1 text-[10px] text-green-400 font-medium bg-green-500/10 px-1.5 py-0.5 rounded">
+                                    <Check className="w-3 h-3" /> Auto-matched
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="relative">
+                                <select
+                                  value={selectedMappings[m.resource.id] || ""}
+                                  onChange={(e) => setSelectedMappings({ ...selectedMappings, [m.resource.id]: e.target.value })}
+                                  className="w-full bg-zinc-950 border border-white/10 text-xs text-zinc-300 rounded-lg px-3 py-2 appearance-none focus:outline-none focus:ring-1 focus:ring-white/20 transition-all cursor-pointer"
+                                >
+                                  <option value="">Select GitHub Repository...</option>
+                                  {githubRepos.map(repo => (
+                                    <option key={repo} value={repo}>{repo}</option>
+                                  ))}
+                                </select>
+                                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-600 text-[10px]">
+                                  ▼
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+
                   {/* ─── Step: Validating ─── */}
                   {step === "validating" && (
                     <motion.div
@@ -337,8 +553,8 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
                         </motion.div>
                       </div>
                       <div className="text-center">
-                        <p className="text-sm font-medium text-white">Validating credentials…</p>
-                        <p className="text-xs text-zinc-500 mt-1">Connecting to AWS STS to verify your access keys</p>
+                        <p className="text-sm font-medium text-white">Please wait…</p>
+                        <p className="text-xs text-zinc-500 mt-1">We're processing your request and setting up connections</p>
                       </div>
                     </motion.div>
                   )}
@@ -363,7 +579,7 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
                       <div className="text-center">
                         <p className="text-sm font-medium text-white">AWS Connected Successfully</p>
                         <p className="text-xs text-zinc-500 mt-1 max-w-xs leading-relaxed">
-                          Your credentials have been encrypted and saved. AutoSRE is now setting up log ingestion from CloudWatch.
+                          Your resources are mapped and Recovera is now monitoring your production instances.
                         </p>
                       </div>
                     </motion.div>
@@ -411,11 +627,10 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
                       <button
                         onClick={handleSubmit}
                         disabled={!isFormValid}
-                        className={`px-5 py-2 text-xs font-medium rounded-lg transition-all active:scale-95 ${
-                          isFormValid
-                            ? "bg-white text-black hover:bg-zinc-100 shadow-sm"
-                            : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
-                        }`}
+                        className={`px-5 py-2 text-xs font-medium rounded-lg transition-all active:scale-95 ${isFormValid
+                          ? "bg-white text-black hover:bg-zinc-100 shadow-sm"
+                          : "bg-zinc-800 text-zinc-500 cursor-not-allowed"
+                          }`}
                       >
                         Connect AWS
                       </button>
@@ -423,10 +638,32 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
                   </>
                 )}
 
-                {step === "validating" && (
+                {(step === "validating" || step === "discovering") && (
                   <p className="text-[11px] text-zinc-600 mx-auto">
                     This usually takes a few seconds…
                   </p>
+                )}
+
+                {step === "mapping" && (
+                  <>
+                    <p className="text-[11px] text-zinc-600">
+                      Verify mappings before continuing
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setStep("credentials")}
+                        className="px-4 py-2 text-xs text-zinc-400 hover:text-white border border-white/10 rounded-lg hover:bg-white/5 transition-all"
+                      >
+                        Back
+                      </button>
+                      <button
+                        onClick={handleSaveMappings}
+                        className="px-5 py-2 bg-white text-black text-xs font-medium rounded-lg hover:bg-zinc-100 transition-all active:scale-95 shadow-sm"
+                      >
+                        Confirm Mappings
+                      </button>
+                    </div>
+                  </>
                 )}
 
                 {step === "success" && (

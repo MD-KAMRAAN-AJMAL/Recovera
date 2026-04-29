@@ -7,6 +7,8 @@ import {
   Search, GitBranch, Star, Lock, Globe, ChevronRight, Check,
   RefreshCw, AlertCircle, BookOpen, Loader2, ArrowLeft
 } from "lucide-react";
+import InstanceSelectModal from "./InstanceSelectModal";
+import IAMCredentialModal from "./IAMCredentialModal";
 
 interface Repo {
   id: number;
@@ -51,8 +53,13 @@ export default function ImportRepo() {
   const [query, setQuery] = useState("");
   const [importing, setImporting] = useState<number | null>(null);
   const [imported, setImported] = useState<number | null>(null);
+  const [credentialId, setCredentialId] = useState<string | null>(null);
+  const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isIAMModalOpen, setIsIAMModalOpen] = useState(false);
 
   useEffect(() => {
+    // 1. Fetch GitHub Repos
     fetch("/api/github/repos")
       .then(r => r.json())
       .then(data => {
@@ -61,6 +68,15 @@ export default function ImportRepo() {
       })
       .catch(() => setError("Could not connect to GitHub. Please try again."))
       .finally(() => setLoading(false));
+
+    // 2. Fetch AWS Credential
+    fetch("/api/user/credentials")
+      .then(r => r.json())
+      .then(data => {
+        if (data.credentials?.[0]) {
+          setCredentialId(data.credentials[0].id);
+        }
+      });
   }, []);
 
   const filtered = repos.filter(r =>
@@ -68,12 +84,20 @@ export default function ImportRepo() {
     (r.description && r.description.toLowerCase().includes(query.toLowerCase()))
   );
 
-  const handleImport = (id: number) => {
-    setImporting(id);
-    setTimeout(() => {
-      setImporting(null);
-      setImported(id);
-    }, 2000);
+  const handleImport = (repo: Repo) => {
+    setSelectedRepo(repo);
+    if (!credentialId) {
+      setIsIAMModalOpen(true);
+      return;
+    }
+    setIsModalOpen(true);
+  };
+
+  const handleIAMSuccess = (newCredentialId: string) => {
+    setCredentialId(newCredentialId);
+    setIsIAMModalOpen(false);
+    // After getting credentials, automatically open the instance selection modal
+    setIsModalOpen(true);
   };
 
   return (
@@ -188,17 +212,16 @@ export default function ImportRepo() {
                   </div>
 
                   <button
-                    onClick={() => !isImported && handleImport(repo.id)}
+                    onClick={() => !isImported && handleImport(repo)}
                     disabled={isImporting || isImported || imported !== null}
-                    className={`flex-shrink-0 ml-4 flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium transition-all active:scale-95 ${
-                      isImported
-                        ? "bg-green-500/10 text-green-400 border border-green-500/20 cursor-default"
-                        : isImporting
+                    className={`flex-shrink-0 ml-4 flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium transition-all active:scale-95 ${isImported
+                      ? "bg-green-500/10 text-green-400 border border-green-500/20 cursor-default"
+                      : isImporting
                         ? "bg-white/5 text-zinc-400 border border-white/10 cursor-not-allowed"
                         : imported !== null
-                        ? "bg-white/5 text-zinc-600 border border-white/5 cursor-not-allowed opacity-40"
-                        : "bg-white text-black hover:bg-zinc-100 shadow-sm border border-white/20"
-                    }`}
+                          ? "bg-white/5 text-zinc-600 border border-white/5 cursor-not-allowed opacity-40"
+                          : "bg-white text-black hover:bg-zinc-100 shadow-sm border border-white/20"
+                      }`}
                   >
                     {isImported ? <><Check className="w-3 h-3" /> Imported</>
                       : isImporting ? <><RefreshCw className="w-3 h-3 animate-spin" /> Importing…</>
@@ -243,6 +266,29 @@ export default function ImportRepo() {
           </motion.p>
         )}
       </div>
+
+      {selectedRepo && (
+        <InstanceSelectModal
+          isOpen={isModalOpen}
+          onClose={() => setIsModalOpen(false)}
+          onSuccess={() => {
+            setImported(selectedRepo.id);
+            // Optional: redirect to dashboard after success
+            setTimeout(() => {
+              window.location.href = "/dashboard";
+            }, 3000);
+          }}
+          repoName={selectedRepo.name}
+          repoFullName={selectedRepo.htmlUrl.split("github.com/")[1]}
+          credentialId={credentialId}
+        />
+      )}
+
+      <IAMCredentialModal
+        isOpen={isIAMModalOpen}
+        onClose={() => setIsIAMModalOpen(false)}
+        onSuccess={handleIAMSuccess}
+      />
     </div>
   );
 }
