@@ -1,4 +1,11 @@
-import { IAMClient, CreateRoleCommand, PutRolePolicyCommand, GetRoleCommand } from "@aws-sdk/client-iam";
+import { 
+    IAMClient, 
+    CreateRoleCommand, 
+    PutRolePolicyCommand, 
+    GetRoleCommand,
+    DeleteRoleCommand,
+    DeleteRolePolicyCommand 
+} from "@aws-sdk/client-iam";
 import { CloudCredential } from "../../generated/prisma/client";
 import { decrypt } from "../encrypt";
 
@@ -113,8 +120,34 @@ export async function createFirehoseRoles(credential: CloudCredential, bucketNam
         }
     }
 
-    // IAM roles take a few seconds to propagate, so we wait briefly
-    await new Promise(resolve => setTimeout(resolve, 5000));
+    // IAM roles propagation is now handled by retry logic in downstream creation steps
 
     return { firehoseRoleArn, cwRoleArn };
+}
+
+export async function deleteFirehoseRoles(credential: CloudCredential, accountId: string, region: string) {
+    const iam = new IAMClient({
+        region,
+        credentials: {
+            accessKeyId: decrypt(credential.accessKeyId),
+            secretAccessKey: decrypt(credential.secretAccessKey),
+        },
+    });
+
+    const firehoseRoleName = `AutoSRE-FirehoseRole-${accountId}-${region}`;
+    const cwRoleName = `AutoSRE-CloudWatchRole-${accountId}-${region}`;
+
+    const cleanup = async (roleName: string, policyName: string) => {
+        try {
+            await iam.send(new DeleteRolePolicyCommand({ RoleName: roleName, PolicyName: policyName }));
+        } catch (e) {}
+        try {
+            await iam.send(new DeleteRoleCommand({ RoleName: roleName }));
+        } catch (e) {}
+    };
+
+    await Promise.all([
+        cleanup(firehoseRoleName, "AutoSRE-Firehose-S3-Policy"),
+        cleanup(cwRoleName, "AutoSRE-CW-Firehose-Policy"),
+    ]);
 }
