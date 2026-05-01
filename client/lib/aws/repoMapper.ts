@@ -1,4 +1,5 @@
 import { AwsResource } from "./DiscoverResources";
+import { prisma } from "@/lib/prisma";
 
 export interface RepoMatch {
   resource: AwsResource;
@@ -58,4 +59,91 @@ export function matchResourcesToRepos(
       confidence: maxConfidence,
     };
   });
+}
+
+function normalizeRepoName(repoFullName: string): string {
+  return repoFullName.includes("/") ? repoFullName.split("/")[1].toLowerCase() : repoFullName.toLowerCase();
+}
+
+interface ResolveRepoMappingInput {
+  integrationId?: string;
+  logGroupName?: string | null;
+  serviceName?: string | null;
+  resourceId?: string | null;
+}
+
+/**
+ * Resolve repo mapping for incoming logs.
+ *
+ * Priority:
+ * 1) Exact confirmed mapping by integration + logGroup + resourceId
+ * 2) Exact confirmed mapping by integration + logGroup
+ * 3) Service name match against confirmed mappings for same integration/log group
+ * 4) Global fallback by confirmed mapping + serviceName
+ */
+export async function resolveRepoMapping(input: ResolveRepoMappingInput): Promise<string | null> {
+  const integrationFilter = input.integrationId ? { integrationId: input.integrationId } : {};
+  const logGroup = input.logGroupName ?? undefined;
+  const service = input.serviceName?.toLowerCase().trim() ?? "";
+  const resourceId = input.resourceId ?? undefined;
+
+  if (logGroup && resourceId) {
+    const exact = await prisma.instanceMapping.findFirst({
+      where: {
+        ...integrationFilter,
+        logGroupName: logGroup,
+        resourceId,
+        status: "confirmed",
+      },
+      select: { repoFullName: true },
+    });
+    if (exact?.repoFullName) return exact.repoFullName;
+  }
+
+  if (logGroup) {
+    const byGroup = await prisma.instanceMapping.findFirst({
+      where: {
+        ...integrationFilter,
+        logGroupName: logGroup,
+        status: "confirmed",
+      },
+      orderBy: { confidence: "desc" },
+      select: { repoFullName: true },
+    });
+    if (byGroup?.repoFullName && !service) return byGroup.repoFullName;
+  }
+
+  if (service) {
+    const candidates = await prisma.instanceMapping.findMany({
+      where: {
+        ...integrationFilter,
+        ...(logGroup ? { logGroupName: logGroup } : {}),
+        status: "confirmed",
+      },
+      select: { repoFullName: true },
+      take: 50,
+    });
+
+    const exactServiceMatch = candidates.find(
+      (c) => normalizeRepoName(c.repoFullName) === service
+    );
+    if (exactServiceMatch) return exactServiceMatch.repoFullName;
+
+    const fuzzyServiceMatch = candidates.find((c) => {
+      const repoName = normalizeRepoName(c.repoFullName);
+      return repoName.includes(service) || service.includes(repoName);
+    });
+    if (fuzzyServiceMatch) return fuzzyServiceMatch.repoFullName;
+
+    const globalCandidates = await prisma.instanceMapping.findMany({
+      where: { status: "confirmed" },
+      select: { repoFullName: true },
+      take: 200,
+    });
+
+    const globalMatch = globalCandidates.find((c) => normalizeRepoName(c.repoFullName) === service);
+    if (globalMatch) return globalMatch.repoFullName;
+  }
+
+  return null;
 }
