@@ -5,10 +5,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import {
   Search, GitBranch, Star, Lock, Globe, ChevronRight, Check,
-  RefreshCw, AlertCircle, BookOpen, Loader2, ArrowLeft
+  RefreshCw, AlertCircle, BookOpen, Loader2, ArrowLeft, Cloud
 } from "lucide-react";
 import InstanceSelectModal from "./InstanceSelectModal";
 import IAMCredentialModal from "./IAMCredentialModal";
+import IntegrateModal from "./IntegrateModal";
 
 interface Repo {
   id: number;
@@ -57,6 +58,7 @@ export default function ImportRepo() {
   const [selectedRepo, setSelectedRepo] = useState<Repo | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isIAMModalOpen, setIsIAMModalOpen] = useState(false);
+  const [showIntegrate, setShowIntegrate] = useState(false);
 
   useEffect(() => {
     // 1. Fetch GitHub Repos
@@ -212,20 +214,11 @@ export default function ImportRepo() {
                   </div>
 
                   <button
-                    onClick={() => !isImported && handleImport(repo)}
-                    disabled={isImporting || isImported || imported !== null}
-                    className={`flex-shrink-0 ml-4 flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium transition-all active:scale-95 ${isImported
-                      ? "bg-green-500/10 text-green-400 border border-green-500/20 cursor-default"
-                      : isImporting
-                        ? "bg-white/5 text-zinc-400 border border-white/10 cursor-not-allowed"
-                        : imported !== null
-                          ? "bg-white/5 text-zinc-600 border border-white/5 cursor-not-allowed opacity-40"
-                          : "bg-white text-black hover:bg-zinc-100 shadow-sm border border-white/20"
-                      }`}
+                    onClick={() => setShowIntegrate(true)}
+                    className="flex-shrink-0 ml-4 flex items-center gap-1.5 px-4 py-1.5 bg-gradient-to-r from-orange-500/10 to-amber-500/10 text-orange-300 text-xs font-medium rounded-lg border border-orange-500/20 hover:border-orange-500/40 hover:from-orange-500/15 hover:to-amber-500/15 transition-all active:scale-95 shadow-sm"
                   >
-                    {isImported ? <><Check className="w-3 h-3" /> Imported</>
-                      : isImporting ? <><RefreshCw className="w-3 h-3 animate-spin" /> Importing…</>
-                        : <>Import <ChevronRight className="w-3 h-3" /></>}
+                    <Cloud className="w-3 h-3" />
+                    Integrate
                   </button>
                 </motion.div>
               );
@@ -288,6 +281,11 @@ export default function ImportRepo() {
         isOpen={isIAMModalOpen}
         onClose={() => setIsIAMModalOpen(false)}
         onSuccess={handleIAMSuccess}
+      />
+
+      <IntegrateModal
+        isOpen={showIntegrate}
+        onClose={() => setShowIntegrate(false)}
       />
     </div>
   );

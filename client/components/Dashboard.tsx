@@ -8,7 +8,6 @@ import {
   LayoutGrid, ScrollText, Search, MoreHorizontal, GitBranch, GitCommit,
   Plus, ChevronDown, AlignJustify, BarChart2, Cloud, Loader2
 } from "lucide-react";
-import IntegrateModal from "./IntegrateModal";
 
 export default function Dashboard() {
   const { data: session } = useSession();
@@ -16,7 +15,6 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [view, setView] = useState<"grid" | "list">("grid");
-  const [showIntegrate, setShowIntegrate] = useState(false);
 
   useEffect(() => {
     fetch("/api/integration/mappings")
@@ -68,15 +66,6 @@ export default function Dashboard() {
             className={`p-2 border rounded-lg transition-colors ${view === "list" ? "border-white/20 bg-white/10 text-white" : "border-white/10 text-zinc-400 hover:bg-white/5"}`}
           >
             <ScrollText className="w-4 h-4" />
-          </button>
-
-          {/* Integrate AI Agent */}
-          <button
-            onClick={() => setShowIntegrate(true)}
-            className="flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-orange-500/10 to-amber-500/10 text-orange-300 text-sm font-medium rounded-lg border border-orange-500/20 hover:border-orange-500/40 hover:from-orange-500/15 hover:to-amber-500/15 transition-all active:scale-95"
-          >
-            <Cloud className="w-3.5 h-3.5" />
-            Integrate
           </button>
 
           {/* Add New */}
@@ -173,8 +162,7 @@ export default function Dashboard() {
           </div>
         )}
       </div>
-      {/* Integrate Modal */}
-      <IntegrateModal isOpen={showIntegrate} onClose={() => setShowIntegrate(false)} />
+
     </div>
   );
 }
