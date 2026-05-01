@@ -140,7 +140,7 @@ export default function Dashboard() {
                   <div className="text-xs text-zinc-500 space-y-1">
                     <div className="flex items-center gap-1.5">
                       <GitBranch className="w-3 h-3" />
-                      <span className="truncate">{project.repo}</span>
+                      <span className="truncate">{project.credentialLabel}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <Cloud className="w-3 h-3" />

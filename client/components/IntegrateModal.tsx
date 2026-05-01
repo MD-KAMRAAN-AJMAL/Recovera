@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   X, Shield, Eye, EyeOff, Cloud, KeyRound, MapPin,
-  AlertTriangle, Loader2, Check, Copy, ExternalLink, Info
+  AlertTriangle, Loader2, Check, Copy, ExternalLink, Info,
+  Search, Server, Cpu, Box, Container, MonitorCog, ChevronDown
 } from "lucide-react";
 
 interface IntegrateModalProps {
@@ -99,31 +100,40 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
 
   const [suggestedMappings, setSuggestedMappings] = useState<SuggestedMapping[]>([]);
   const [githubRepos, setGithubRepos] = useState<string[]>([]);
+  const [existingMappingIds, setExistingMappingIds] = useState<Set<string>>(new Set());
   const [selectedMappings, setSelectedMappings] = useState<Record<string, string>>({}); // resourceId -> repoFullName
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const [existingCreds, setExistingCreds] = useState<{ id: string; label: string; region: string } | null>(null);
+  const [existingCredsList, setExistingCredsList] = useState<{ id: string; label: string; region: string }[]>([]);
   const [showNewForm, setShowNewForm] = useState(true);
 
   useEffect(() => {
     if (!isOpen) return;
 
-    const checkExistingCredentials = async () => {
+    const fetchData = async () => {
       try {
-        const res = await fetch("/api/user/credentials");
-        const data = await res.json();
+        // 1. Check existing credentials
+        const credsRes = await fetch("/api/user/credentials");
+        const credsData = await credsRes.json();
         
-        const awsCreds = data.credentials?.[0];
-        
-        if (awsCreds) {
-          setExistingCreds(awsCreds);
+        if (credsData.credentials && credsData.credentials.length > 0) {
+          setExistingCredsList(credsData.credentials);
           setShowNewForm(false);
         }
+
+        // 2. Fetch existing mappings to hide already connected resources
+        const mappingsRes = await fetch("/api/integration/mappings");
+        const mappingsData = await mappingsRes.json();
+        if (mappingsData.success && mappingsData.projects) {
+          const ids = new Set(mappingsData.projects.map((p: any) => p.resourceId));
+          setExistingMappingIds(ids);
+        }
       } catch (err) {
-        console.error("Error checking credentials:", err);
+        console.error("Error fetching modal data:", err);
       }
     };
 
-    checkExistingCredentials();
+    fetchData();
   }, [isOpen]);
 
 
@@ -251,7 +261,7 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
     setShowSecret(false);
     setShowPolicy(false);
     setErrorMessage("");
-    setExistingCreds(null);
+    setExistingCredsList([]);
     setShowNewForm(true);
     onClose();
   };
@@ -318,51 +328,53 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
                       className="space-y-4"
                     >
                       {/* Existing Credentials Option */}
-                      {existingCreds && !showNewForm && (
-                        <div className="mb-6">
+                      {existingCredsList.length > 0 && !showNewForm && (
+                        <div className="mb-6 space-y-4">
                           <label className="block text-xs font-medium text-zinc-400 mb-2">
-                            Saved Connection
+                            Saved Connections
                           </label>
-                          <div className="group relative flex items-center justify-between p-3.5 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.04] transition-colors">
-                            <div className="flex items-center gap-3.5">
-                              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-500/10 to-amber-500/5 border border-orange-500/20 flex items-center justify-center">
-                                <Cloud className="w-4.5 h-4.5 text-orange-400" />
+                          <div className="space-y-2">
+                            {existingCredsList.map((creds) => (
+                              <div key={creds.id} className="group relative flex items-center justify-between p-3.5 rounded-xl border border-white/10 bg-white/[0.02] hover:bg-white/[0.04] transition-colors">
+                                <div className="flex items-center gap-3.5">
+                                  <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-orange-500/10 to-amber-500/5 border border-orange-500/20 flex items-center justify-center">
+                                    <Cloud className="w-4.5 h-4.5 text-orange-400" />
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium text-white">{creds.label || "AWS Account"}</p>
+                                    <p className="text-[11px] text-zinc-500 mt-0.5">Region: {creds.region}</p>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    setCredentialId(creds.id);
+                                    handleDiscover(creds.id);
+                                  }}
+                                  className="px-3.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-xs font-medium transition-colors"
+                                >
+                                  Connect
+                                </button>
                               </div>
-                              <div>
-                                <p className="text-sm font-medium text-white">{existingCreds.label || "AWS Account"}</p>
-                                <p className="text-[11px] text-zinc-500 mt-0.5">Region: {existingCreds.region}</p>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                setCredentialId(existingCreds.id);
-                                handleDiscover(existingCreds.id);
-                              }}
-                              className="px-3.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 text-white text-xs font-medium transition-colors"
-                            >
-                              Connect
-                            </button>
+                            ))}
                           </div>
                           
-                          {!showNewForm && (
-                            <div className="flex justify-center mt-6 mb-2">
-                              <button 
-                                type="button"
-                                onClick={() => setShowNewForm(true)}
-                                className="px-4 py-2 bg-zinc-900 border border-white/10 rounded-lg text-xs font-medium text-white hover:bg-zinc-800 transition-colors flex items-center gap-2 shadow-sm"
-                              >
-                                <span className="text-zinc-400">+</span> Add New Role
-                              </button>
-                            </div>
-                          )}
+                          <div className="flex justify-center mt-6 mb-2">
+                            <button 
+                              type="button"
+                              onClick={() => setShowNewForm(true)}
+                              className="px-4 py-2 bg-zinc-900 border border-white/10 rounded-lg text-xs font-medium text-white hover:bg-zinc-800 transition-colors flex items-center gap-2 shadow-sm"
+                            >
+                              <span className="text-zinc-400">+</span> Add New Role
+                            </button>
+                          </div>
                         </div>
                       )}
 
                       {showNewForm && (
                         <motion.div 
-                          initial={existingCreds ? { opacity: 0, height: 0 } : false} 
+                          initial={existingCredsList.length > 0 ? { opacity: 0, height: 0 } : false} 
                           animate={{ opacity: 1, height: 'auto' }}
                           className="space-y-4 overflow-hidden"
                         >
@@ -551,62 +563,131 @@ export default function IntegrateModal({ isOpen, onClose }: IntegrateModalProps)
                       initial={{ opacity: 0, x: 10 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -10 }}
-                      className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar"
+                      className="flex flex-col h-[500px]"
                     >
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-xs font-medium text-zinc-400">Map Resources to Repositories</p>
-                        <span className="text-[10px] bg-blue-500/10 text-blue-400 px-2 py-0.5 rounded-full border border-blue-500/20">
-                          {suggestedMappings.length} Found
-                        </span>
+                      <div className="px-6 py-4 border-b border-white/5 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-semibold text-white">Manual Mapping Confirmation</p>
+                          <span className="text-[10px] bg-blue-500/10 text-blue-400 px-2.5 py-1 rounded-full border border-blue-500/20 font-medium">
+                            {suggestedMappings.length} Resources Discovered
+                          </span>
+                        </div>
+
+                        {/* Search */}
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                          <input
+                            type="text"
+                            placeholder="Search resources by name or ID..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="w-full bg-zinc-900/50 border border-white/10 text-white text-sm rounded-lg pl-10 pr-4 py-2 placeholder:text-zinc-600 focus:outline-none focus:ring-1 focus:ring-white/20 transition-all"
+                          />
+                        </div>
                       </div>
 
-                      {suggestedMappings.length === 0 ? (
-                        <div className="text-center py-8 border border-dashed border-white/10 rounded-xl">
-                          <p className="text-xs text-zinc-500">No supported resources found in this region.</p>
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {suggestedMappings.map((m) => (
-                            <div key={m.resource.id} className="p-3 bg-zinc-900/50 border border-white/5 rounded-xl space-y-3">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2.5">
-                                  <div className="w-8 h-8 rounded-lg bg-zinc-800 flex items-center justify-center border border-white/5">
-                                    {m.resource.type === "eks" && <Cloud className="w-4 h-4 text-orange-400" />}
-                                    {m.resource.type === "ecs" && <Cloud className="w-4 h-4 text-blue-400" />}
-                                    {m.resource.type === "ec2" && <Cloud className="w-4 h-4 text-zinc-400" />}
-                                    {m.resource.type === "lambda" && <Cloud className="w-4 h-4 text-amber-400" />}
-                                  </div>
-                                  <div>
-                                    <p className="text-xs font-medium text-white">{m.resource.name}</p>
-                                    <p className="text-[10px] text-zinc-500 uppercase tracking-wider">{m.resource.type} • {m.resource.region}</p>
-                                  </div>
-                                </div>
-                                {m.confidence > 0.9 && !selectedMappings[m.resource.id] && (
-                                  <div className="flex items-center gap-1 text-[10px] text-green-400 font-medium bg-green-500/10 px-1.5 py-0.5 rounded">
-                                    <Check className="w-3 h-3" /> Auto-matched
-                                  </div>
-                                )}
-                              </div>
+                      <div className="flex-1 overflow-y-auto px-6 py-4 space-y-6 custom-scrollbar">
+                        {(() => {
+                          // Filter out resources already connected
+                          const available = suggestedMappings.filter(m => !existingMappingIds.has(m.resource.id));
 
-                              <div className="relative">
-                                <select
-                                  value={selectedMappings[m.resource.id] || ""}
-                                  onChange={(e) => setSelectedMappings({ ...selectedMappings, [m.resource.id]: e.target.value })}
-                                  className="w-full bg-zinc-950 border border-white/10 text-xs text-zinc-300 rounded-lg px-3 py-2 appearance-none focus:outline-none focus:ring-1 focus:ring-white/20 transition-all cursor-pointer"
-                                >
-                                  <option value="">Select GitHub Repository...</option>
-                                  {githubRepos.map(repo => (
-                                    <option key={repo} value={repo}>{repo}</option>
+                          const filtered = available.filter(m => 
+                            m.resource.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                            m.resource.id.toLowerCase().includes(searchQuery.toLowerCase())
+                          );
+
+                          if (filtered.length === 0) {
+                            return (
+                              <div className="flex flex-col items-center justify-center py-12 text-zinc-500 gap-3 border border-dashed border-white/5 rounded-2xl">
+                                <Search className="w-8 h-8 opacity-20" />
+                                <p className="text-sm">No resources match your search.</p>
+                              </div>
+                            );
+                          }
+
+                          // Group by type
+                          const groups = filtered.reduce((acc, m) => {
+                            acc[m.resource.type] = acc[m.resource.type] || [];
+                            acc[m.resource.type].push(m);
+                            return acc;
+                          }, {} as Record<string, SuggestedMapping[]>);
+
+                          const TYPE_ICONS: Record<string, any> = {
+                            ec2: Cpu,
+                            ecs: Container,
+                            eks: Box,
+                            lambda: Cloud,
+                            log_group: MonitorCog,
+                          };
+
+                          const TYPE_LABELS: Record<string, string> = {
+                            ec2: "EC2 Instances",
+                            ecs: "ECS Services",
+                            eks: "EKS Clusters",
+                            lambda: "Lambda Functions",
+                            log_group: "CloudWatch Log Groups",
+                          };
+
+                          return Object.entries(groups).map(([type, items]) => {
+                            const Icon = TYPE_ICONS[type] || Server;
+                            return (
+                              <div key={type} className="space-y-3">
+                                <div className="flex items-center gap-2 px-1">
+                                  <Icon className="w-3.5 h-3.5 text-zinc-500" />
+                                  <h3 className="text-[11px] font-bold text-zinc-500 uppercase tracking-wider">{TYPE_LABELS[type] || type}</h3>
+                                  <span className="text-[10px] text-zinc-600 font-mono">({items.length})</span>
+                                </div>
+                                <div className="space-y-2">
+                                  {items.map((m) => (
+                                    <div key={m.resource.id} className="group p-4 bg-zinc-900/40 border border-white/5 rounded-xl hover:border-white/10 transition-all">
+                                      <div className="flex items-start justify-between mb-4">
+                                        <div className="flex items-center gap-3">
+                                          <div className="w-10 h-10 rounded-lg bg-zinc-800/50 flex items-center justify-center border border-white/5 group-hover:border-white/10 transition-colors">
+                                            <Icon className="w-5 h-5 text-zinc-400 group-hover:text-white transition-colors" />
+                                          </div>
+                                          <div>
+                                            <div className="flex items-center gap-2">
+                                              <p className="text-sm font-semibold text-white">{m.resource.name}</p>
+                                              {m.confidence > 0.9 && !selectedMappings[m.resource.id] && (
+                                                <div className="text-[9px] text-green-400 font-bold bg-green-500/10 px-1.5 py-0.5 rounded uppercase tracking-tight">
+                                                  Best Match
+                                                </div>
+                                              )}
+                                            </div>
+                                            <p className="text-[11px] text-zinc-500 font-mono mt-0.5 truncate max-w-[200px]">{m.resource.id}</p>
+                                          </div>
+                                        </div>
+                                        <div className="text-right">
+                                          <p className="text-[10px] text-zinc-600 font-medium uppercase">{m.resource.region}</p>
+                                          <p className="text-[10px] text-zinc-700 mt-0.5">Auto-detected</p>
+                                        </div>
+                                      </div>
+
+                                      <div className="relative">
+                                        <select
+                                          value={selectedMappings[m.resource.id] || m.bestMatch || ""}
+                                          onChange={(e) => setSelectedMappings({ ...selectedMappings, [m.resource.id]: e.target.value })}
+                                          className="w-full bg-zinc-950 border border-white/10 text-xs text-zinc-300 rounded-lg px-3.5 py-2.5 appearance-none focus:outline-none focus:ring-1 focus:ring-white/20 transition-all cursor-pointer group-hover:border-white/20"
+                                        >
+                                          <option value="">Do not monitor</option>
+                                          <optgroup label="GitHub Repositories">
+                                            {githubRepos.map(repo => (
+                                              <option key={repo} value={repo}>{repo}</option>
+                                            ))}
+                                          </optgroup>
+                                        </select>
+                                        <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-600">
+                                          <ChevronDown className="w-3.5 h-3.5" />
+                                        </div>
+                                      </div>
+                                    </div>
                                   ))}
-                                </select>
-                                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-zinc-600 text-[10px]">
-                                  ▼
                                 </div>
                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                            );
+                          });
+                        })()}
+                      </div>
                     </motion.div>
                   )}
 

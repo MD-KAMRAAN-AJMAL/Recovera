@@ -93,7 +93,8 @@ export async function GET() {
       include: {
         integrations: {
           include: {
-            mappings: true
+            mappings: true,
+            credentials: true
           }
         }
       }
@@ -107,6 +108,7 @@ export async function GET() {
         id: mapping.id,
         name: mapping.repoFullName.split("/")[1] || mapping.repoFullName,
         repo: mapping.repoFullName,
+        credentialLabel: integration.credentials.label || "AWS Account",
         resourceId: mapping.resourceId,
         resourceType: mapping.resourceType,
         status: integration.status,
