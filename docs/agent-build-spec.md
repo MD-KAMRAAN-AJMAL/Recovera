@@ -70,8 +70,8 @@ Required behavior:
 - Mark malformed records with failure metadata for DLQ path.
 
 Acceptance:
-- [ ] Endpoint exists and handles valid Firehose sample payload.
-- [ ] Invalid records do not crash entire batch.
+- [x] Endpoint exists and handles valid Firehose sample payload.
+- [x] Invalid records do not crash entire batch.
 - [ ] Response time target: p95 under 500ms for small test batches.
 
 ### Task 1.2 - Add normalized event contract
@@ -82,8 +82,8 @@ Add type:
   - `eventId`, `integrationId`, `logGroupName`, `logStreamName`, `messageRaw`, `timestamp`, `parseStatus`.
 
 Acceptance:
-- [ ] All events are normalized into one internal shape.
-- [ ] `eventId` deterministic hashing implemented.
+- [x] All events are normalized into one internal shape.
+- [x] `eventId` deterministic hashing implemented.
 
 ### Task 1.3 - Queue handoff + DLQ
 **Implement:** `client/lib/ingest/publish.ts` (or equivalent)
@@ -93,8 +93,8 @@ Required:
 - Failed parse events stored with reason for replay.
 
 Acceptance:
-- [ ] Successful events are enqueued.
-- [ ] Failed events are persisted with error reason.
+- [x] Successful events are enqueued.
+- [x] Failed events are persisted with error reason.
 
 ---
 

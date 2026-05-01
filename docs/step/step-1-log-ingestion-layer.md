@@ -74,16 +74,16 @@ Processing pipeline (per record):
 ## Implementation Checklist
 
 - [x] Provision Firehose + IAM + CloudWatch subscription path
-- [ ] Create `client/app/api/ingest/logs/route.ts`
-- [ ] Add Firehose payload parser + validation utilities
-- [ ] Add normalized event schema/type in `client/lib/ingest/types.ts`
-- [ ] Persist ingestion artifacts (raw pointer + normalized event)
-- [ ] Publish normalized events to queue for Step 2 worker
-- [ ] Add dedup logic keyed by deterministic `eventId`
-- [ ] Implement dead-letter storage and retry metadata
-- [ ] Add ingest metrics (TPS, parse failure %, p95 latency)
-- [ ] Add alerting on ingest failures/backlog growth
-- [ ] Add integration tests with real Firehose fixture payloads
+- [x] Create `client/app/api/ingest/logs/route.ts`
+- [x] Add Firehose payload parser + validation utilities
+- [x] Add normalized event schema/type in `client/lib/ingest/types.ts`
+- [x] Persist ingestion artifacts (raw pointer + normalized event)
+- [x] Publish normalized events to queue for Step 2 worker
+- [x] Add dedup logic keyed by deterministic `eventId`
+- [x] Implement dead-letter storage and retry metadata
+- [x] Add ingest metrics (TPS, parse failure %, p95 latency)
+- [x] Add alerting on ingest failures/backlog growth
+- [x] Add integration tests with real Firehose fixture payloads
 
 ## Verification Criteria (Definition of Done)
 - Firehose delivery to `/api/ingest/logs` is stable under burst traffic.
