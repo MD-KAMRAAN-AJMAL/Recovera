@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:ingest": "node --import tsx --test tests/ingest/*.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-cloudwatch-logs": "^3.1037.0",
