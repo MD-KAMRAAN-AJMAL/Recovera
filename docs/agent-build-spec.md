@@ -25,6 +25,37 @@ This document is written for an implementation agent. Follow tasks **in order**.
   - `client/lib/aws/repoMapper.ts`
   - `client/prisma/schema.prisma`
 
+## Implementation Audit Snapshot (Current Repo)
+This is the verified status based on current files in the repository.
+
+### Completed Now
+- [x] AWS credential flow implemented (`setup` + `user/credentials` APIs)
+- [x] AWS provisioning flow implemented (`provision` API)
+- [x] S3/IAM/Firehose/CloudWatch helper modules implemented
+- [x] Resource discovery + repo mapping APIs implemented (`discover`, `mappings`)
+- [x] Baseline schema for integration + mapping implemented (`CloudCredential`, `Integration`, `InstanceMapping`, `Repository`)
+
+### Not Yet Implemented
+- [ ] `client/app/api/ingest/logs/route.ts`
+- [ ] `client/lib/ingest/*` normalization and publish modules
+- [ ] `workers/log-processor.ts`
+- [ ] Detection models (`Incident`, `IncidentEvent`, `DetectionAudit`)
+- [ ] RCA modules/APIs (`client/lib/ai/*`, `api/incidents/*/analyze`)
+- [ ] Retrieval modules/APIs (`client/lib/retrieval/*`, `api/retrieval/search`)
+- [ ] Fix generator modules (`fixGenerator`, `patchValidator`)
+- [ ] PR automation modules/APIs (`prCreator`, incident action route)
+- [ ] Safety modules/audit models (`policyEngine`, `SafetyAuditLog`)
+
+### Phase Completion Status
+- [x] Phase 0 (Foundation/Integration Bootstrap) - Completed
+- [ ] Phase 1 (Ingestion Runtime) - Not started
+- [ ] Phase 2 (Detection Engine) - Not started
+- [ ] Phase 3 (Root Cause Analyzer) - Not started
+- [ ] Phase 4 (Retrieval Layer) - Not started
+- [ ] Phase 5 (Fix Generator) - Not started
+- [ ] Phase 6 (PR Creator) - Not started
+- [ ] Phase 7 (Safety Layer) - Not started
+
 ---
 
 ## Phase 1: Ingestion Runtime
