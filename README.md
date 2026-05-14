@@ -1,178 +1,222 @@
-# Recovera
+# 🛠️ Recovera
 
-Recovera is an AI-assisted SRE platform that turns production signals into actionable remediation workflows.
+> **AI-Assisted SRE Platform for Automated Incident Remediation.**
 
-Core pipeline:
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Next.js](https://img.shields.io/badge/Next.js-16.2-black?logo=next.js)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue?logo=typescript)](https://www.typescriptlang.org/)
+[![AWS](https://img.shields.io/badge/AWS-Cloud-orange?logo=amazon-aws)](https://aws.amazon.com/)
+[![AI-Powered](https://img.shields.io/badge/AI-Powered-purple?logo=google-gemini)](https://ai.google.dev/)
+[![Status](https://img.shields.io/badge/Status-Beta-green.svg)]()
 
-`Logs -> Detection -> RCA -> Fix Generation -> PR Creation -> Safety-Gated Automation`
+Recovera is an intelligent SRE (Site Reliability Engineering) platform designed to bridge the gap between production anomalies and resolution. It transforms raw logs and alerts into actionable root-cause analysis (RCA) and safety-gated remediation workflows.
 
-## Problem Statement
+[**Quick Start Guide**](#-installation) | [**View Demo**](https://drive.google.com/file/d/1SfO5jKV9pYUv7NR5GFOCqIYiwpbH1St5/view?usp=drivesdk) | [**Documentation**](./docs/)
 
-Modern engineering teams receive huge volumes of production logs and alerts, but root-cause investigation and remediation are still mostly manual. This slows incident response, increases downtime, and creates operational fatigue. Recovera addresses this by automating the path from detection to safe, reviewable fixes.
+---
 
-## Team Details
+## 🌟 Overview
 
-- Team Name: `Champaran Coders`
-- Team Members:
-  - Priyanshu Kumar (Team Lead) [https://github.com/Priyanshu8023]
-  - Anshit Gupta [https://github.com/Anshit-Gupta]
-  - Vedant A [https://github.com/V3DxNT]
-  - Priyanshu Kumar [https://github.com/Priyanshu-Ku]
+Modern engineering teams are overwhelmed by the volume of production signals. When an incident occurs, the path from **Detection** to **Resolution** is often manual, slow, and prone to fatigue. 
 
-## Demo
+**Recovera solves this by:**
+- **Automating Investigation**: Instantly correlates logs with recent deployments and git diffs.
+- **AI-Driven RCA**: Leverages LLMs (Gemini/xAI) to hypothesize root causes with high confidence.
+- **Safety-First Remediation**: Generates code fixes and opens Pull Requests only after passing policy-based safety checks.
+- **Closed-Loop Learning**: Stores incident outcomes to improve future analysis accuracy.
 
-- Demo Link: https://drive.google.com/file/d/1SfO5jKV9pYUv7NR5GFOCqIYiwpbH1St5/view?usp=drivesdk
+---
 
-## Key Features
+## ✨ Key Features
 
-### Foundation and Integrations
-- GitHub authentication with NextAuth (OAuth + session handling).
-- AWS credential onboarding with encryption and STS verification.
-- AWS provisioning helpers for S3, IAM, Firehose, and CloudWatch.
-- Cloud resource discovery and repository-to-resource mapping persistence.
-- Provisioning rollback support for partial failures.
+### 📡 Foundation & Integrations
+*   **Multi-Cloud Onboarding**: Seamless AWS credential management with AES-256 encryption.
+*   **Resource Discovery**: Automatic mapping of AWS resources (S3, EC2, ECS) to GitHub repositories.
+*   **Unified Ingestion**: Log normalization pipeline for Firehose, CloudWatch, and custom webhooks.
 
-### Incident and AI Workflow
-- Ingestion endpoint and log normalization pipeline.
-- Rule-first incident detection with LLM fallback classification.
-- Incident lifecycle models (incident, events, audits, RCA versions, actions).
-- AI root-cause analysis and fix generation modules.
-- Patch validation and PR creation workflow for GitHub.
+### 🧠 Intelligent Workflow
+*   **Hybrid Detection**: Rule-based signatures for known patterns with LLM fallback for ambiguous anomalies.
+*   **Contextual Analysis**: AI agents analyze stack traces, deployment history, and retrieval-augmented code snippets.
+*   **Auto-Remediation**: Automated branch creation, patch application, and Pull Request generation.
 
-### Safety and Governance
-- Policy engine with explicit decision outputs:
-  - `ALLOW_AUTO_PR`
-  - `REQUIRE_HUMAN_APPROVAL`
-  - `BLOCK_AND_ALERT`
-- Safety audit logging for policy decisions and action traces.
-- Guardrails for risky domains and low-confidence automation.
+### 🛡️ Safety & Governance
+*   **Policy Engine**: Hardcoded guardrails (e.g., `REQUIRE_HUMAN_APPROVAL` for auth/payment systems).
+*   **Sandbox Validation**: Validates generated patches against build and test suites before PR creation.
+*   **Comprehensive Audit**: Detailed traces of every AI decision and action for full transparency.
 
-## Architecture Overview
+---
 
-Recovera follows a layered architecture:
+## 💻 Tech Stack
 
-1. Ingestion Layer
-- Accepts incoming logs/events and normalizes them into a consistent internal shape.
+| Category | Technologies |
+| --- | --- |
+| **Frontend** | Next.js 16 (App Router), React 19, Tailwind CSS 4, Framer Motion |
+| **Backend** | Next.js API Routes, Node.js (TypeScript), BullMQ (Queueing) |
+| **Database** | PostgreSQL, Prisma ORM, Redis (for workers) |
+| **AI / ML** | Vercel AI SDK, Google Gemini, xAI, Groq |
+| **Cloud (AWS)** | STS, S3, IAM, Firehose, CloudWatch, EC2/ECS/EKS |
+| **DevOps** | GitHub Actions, Octokit (GitHub API), Docker |
+| **Monitoring** | OpenTelemetry, Prometheus (Roadmap) |
 
-2. Detection Layer
-- Applies deterministic signatures/rules first, then uses AI only for ambiguous cases.
+---
 
-3. RCA + Fix Layer
-- Builds root-cause hypotheses and generates constrained patch candidates.
+## 🏗️ Architecture
 
-4. Execution Layer
-- Validates patches, creates branches/commits, and opens pull requests.
+Recovera follows a layered event-driven architecture designed for reliability and scalability.
 
-5. Safety Layer
-- Evaluates risk and policy before allowing automated actions.
-
-6. Observability + Audit Layer
-- Persists incidents, decision artifacts, and action history for traceability.
-
-## Tech Stack
-
-- Frontend/API: Next.js (App Router), React, TypeScript
-- Auth: NextAuth + Prisma Adapter
-- Database: PostgreSQL + Prisma ORM
-- AI: Vercel AI SDK providers (`@ai-sdk/google`, `@ai-sdk/xai`)
-- Cloud: AWS SDK v3 (STS, S3, IAM, Firehose, CloudWatch, EC2/ECS/EKS/ECR/SSM)
-- GitHub Integration: Octokit REST API
-- Testing: Node test runner with `tsx`, Jest config present
-
-## Project Structure
-
-```text
-Recovera/
-├─ docs/                         # Product, architecture, and implementation docs
-│  ├─ plan.md
-│  ├─ architecture-roadmap.md
-│  ├─ agent-build-spec.md
-│  ├─ step/                      # Phase-by-phase execution docs
-│  ├─ step-1/
-│  ├─ step-4/
-│  └─ client/                    # Auth, dashboard, DB, encryption docs
-│
-└─ client/                       # Next.js app + backend API routes + AI modules
-   ├─ app/
-   │  ├─ api/
-   │  │  ├─ auth/[...nextauth]/route.ts
-   │  │  ├─ github/repos/route.ts
-   │  │  ├─ integration/         # setup, provision, discover, mappings
-   │  │  ├─ ingest/logs/route.ts
-   │  │  ├─ incidents/           # list, analyze, fix, safety, PR actions
-   │  │  ├─ repositories/route.ts
-   │  │  └─ user/credentials/route.ts
-   │  ├─ dashboard/
-   │  └─ repo/[repoName]/page.tsx
-   │
-   ├─ components/                # UI building blocks (dashboard, import, modals)
-   ├─ lib/
-   │  ├─ ai/                     # RCA, fix generator, patch validator, tests
-   │  ├─ aws/                    # Provisioning/discovery/mapping helpers
-   │  ├─ detection/              # Incident detection engine
-   │  ├─ ingest/                 # Firehose processing + normalization + publish
-   │  ├─ github/                 # PR creation helpers
-   │  ├─ safety/                 # Policy engine
-   │  ├─ sandbox/                # Validation runner
-   │  ├─ encrypt.ts
-   │  └─ prisma.ts
-   │
-   ├─ Agentic-AI/                # Agent brain, prompts, tooling, verification
-   ├─ prisma/
-   │  ├─ schema.prisma           # Full data model (users, integrations, incidents, actions)
-   │  └─ migrations/
-   ├─ tests/                     # detection, safety, AI, e2e suites
-   └─ package.json
+### High-Level System Flow
+```mermaid
+graph TD
+    A[Production Environment] -->|Logs/Metrics| B[Ingestion Layer]
+    B -->|Normalized Events| C[Anomaly Detection]
+    C -->|Incident Trigger| D[AI Root Cause Analysis]
+    D -->|Hypothesis| E[Decision Engine]
+    E -->|Safety Checks| F{Action Type}
+    F -->|Low Risk| G[Auto PR Generation]
+    F -->|Critical| H[Emergency Rollback]
+    F -->|Uncertain| I[Engineer Alert]
+    G --> J[GitHub Repo]
+    H --> K[CI/CD Pipeline]
+    I --> L[Slack/PagerDuty]
 ```
 
-## Database Architecture (High Level)
+### Incident Lifecycle Sequence
+```mermaid
+sequenceDiagram
+    participant App as Production App
+    participant Ingest as Ingest API
+    participant Detect as Anomaly Detector
+    participant AI as AI Agent (LLM)
+    participant Safety as Policy Engine
+    participant GitHub as GitHub API
 
-Key domain entities in `prisma/schema.prisma`:
+    App->>Ingest: Stream Logs (Firehose)
+    Ingest->>Detect: Process Normalized Stream
+    Detect->>Detect: Flag Error Spike (12.5%)
+    Detect->>AI: Trigger RCA (Context: Log + Diff)
+    AI->>AI: Analyze Stack Trace & Code
+    AI->>Safety: Propose Fix (Confidence: 94%)
+    Safety->>Safety: Evaluate Risk (Allowed: Auto-PR)
+    Safety->>GitHub: Create Branch & Open PR
+    GitHub-->>App: Notify Team of PR
+```
 
-- Identity: `User`, `Account`, `Session`
-- Cloud integration: `CloudCredential`, `Integration`, `InstanceMapping`
-- Source control mapping: `Repository`
-- Incident pipeline: `Incident`, `IncidentEvent`, `DetectionAudit`, `IncidentRca`
-- Remediation workflow: `PatchArtifact`, `IncidentAction`
-- Safety governance: `SafetyAuditLog`
+---
 
-## Local Setup
-
-From `Recovera/client`:
+## 📁 Folder Structure
 
 ```bash
-npm install
-npx prisma generate
-npx prisma migrate dev
-npm run dev
+Recovera/
+├── client/                     # Main Next.js Application
+│   ├── app/                    # App Router (Pages & API)
+│   │   ├── api/                # Backend API Layer
+│   │   ├── dashboard/          # Incident Monitoring UI
+│   │   └── repo/               # Repository Management
+│   ├── components/             # UI Components (Radix/Lucide)
+│   ├── lib/                    # Core Business Logic
+│   │   ├── ai/                 # RCA & Fix Generators
+│   │   ├── aws/                # Cloud Integration Helpers
+│   │   ├── detection/          # Anomaly Engines
+│   │   └── safety/             # Policy & Governance
+│   ├── prisma/                 # Database Schema & Migrations
+│   └── tests/                  # E2E & Integration Suites
+├── docs/                       # Comprehensive Documentation
+└── workers/                    # Background Processing Tasks
 ```
 
-Environment variables:
-- Use `client/.env.example` as the baseline.
-- Ensure secrets like `ENCRYPTION_KEY`, OAuth credentials, and database connection values are configured.
+---
 
-## Available Scripts
+## 🚀 Installation
 
-Inside `Recovera/client`:
+### Prerequisites
+- **Node.js**: v18.x or higher
+- **PostgreSQL**: v14+ (or Supabase/Neon)
+- **Redis**: For background job processing
+- **AWS Account**: With IAM permissions for resource discovery
 
-- `npm run dev` - Start local development server
-- `npm run build` - Production build
-- `npm run start` - Start production server
-- `npm run lint` - Lint project
-- `npm run test:ingest` - Ingestion tests
-- `npm run test:replay` - AI replay suite
-- `npm run test:pr-creator` - PR creator tests
-- `npm run test:safety` - Safety policy tests
-- `npm run test:e2e` - End-to-end pipeline tests
+### Step-by-Step Setup
 
-## Documentation Map
+1.  **Clone the Repository**
+    ```bash
+    git clone https://github.com/Priyanshu8023/Recovera.git
+    cd Recovera/client
+    ```
 
-- Product plan: `docs/plan.md`
-- Architecture and roadmap: `docs/architecture-roadmap.md`
-- Agent execution spec: `docs/agent-build-spec.md`
-- Client deep dives:
-  - `docs/client/nextauth-documentation.md`
-  - `docs/client/encryption-logic.md`
-  - `docs/client/database-schema.md`
-  - `docs/client/dashboard-logic.md`
+2.  **Install Dependencies**
+    ```bash
+    npm install
+    ```
 
+3.  **Environment Configuration**
+    Copy `.env.example` to `.env` and fill in your credentials.
+    ```bash
+    cp .env.example .env
+    ```
+
+4.  **Database Migration**
+    ```bash
+    npx prisma generate
+    npx prisma migrate dev
+    ```
+
+5.  **Run Development Server**
+    ```bash
+    npm run dev
+    ```
+
+---
+
+## 🔐 Environment Variables
+
+| Variable | Description | Example Value | Required |
+| --- | --- | --- | --- |
+| `DATABASE_URL` | PostgreSQL connection string | `postgresql://...` | Yes |
+| `GITHUB_ID` | GitHub OAuth App Client ID | `Ov23...` | Yes |
+| `GITHUB_SECRET` | GitHub OAuth App Secret | `928d...` | Yes |
+| `NEXTAUTH_SECRET` | Secret for session encryption | `your_secret` | Yes |
+| `ENCRYPTION_KEY` | Key for AWS token encryption | `32_char_hex` | Yes |
+| `GEMINI_API_KEY` | Google AI API Key | `AIza...` | Yes |
+| `AGENT_MOCK` | Toggle AI mock mode | `false` | No |
+
+---
+
+## 🛡️ Security
+
+Recovera is built with enterprise security at its core:
+- **AES-256-CBC Encryption**: All cloud credentials and sensitive tokens are encrypted at rest.
+- **OIDC/OAuth**: Secure authentication via GitHub NextAuth.
+- **Role-Based Access**: Granular permissions for integration and action triggers.
+- **Safety Guardrails**: Hardcoded policies that prevent AI from modifying critical systems (Auth, Payments, DB Migrations) without human approval.
+
+---
+
+## 🗺️ Roadmap
+
+- [x] **Phase 1**: Foundation & AWS/GitHub Integration.
+- [/] **Phase 2**: Real-time Log Ingestion & Anomaly Detection.
+- [ ] **Phase 3**: Retrieval-Augmented Generation (RAG) for better code context.
+- [ ] **Phase 4**: Multi-cloud support (GCP & Azure).
+- [ ] **Phase 5**: Interactive "Chat-with-SRE" assistant.
+
+---
+
+## 🤝 Contributing
+
+Contributions are what make the open-source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+---
+
+## 📜 License
+
+Distributed under the MIT License. See `LICENSE` for more information.
+
+  
+
+---
+  
