@@ -44,7 +44,7 @@ const TYPE_LABELS: Record<string, string> = {
 };
 
 export default function InstanceSelectModal({
-  isOpen, onClose, repoName, repoFullName, credentialId
+  isOpen, onClose, repoName, repoFullName, credentialId, onSuccess
 }: InstanceSelectModalProps) {
   const [step, setStep] = useState<Step>("discovering");
   const [resources, setResources] = useState<AwsResource[]>([]);
@@ -63,35 +63,27 @@ export default function InstanceSelectModal({
 
     (async () => {
       try {
-        const res = await fetch("/api/integration/discover", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ credentialId }),
-        });
+        const res = await fetch(
+          `/api/integration/discover?credentialId=${encodeURIComponent(credentialId)}`,
+        );
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
 
-        const discovered: AwsResource[] = data.resources || [];
+        const discovered: AwsResource[] = (data.mappings || []).map(
+          (m: { resource?: AwsResource }) => m.resource,
+        ).filter(Boolean);
         setResources(discovered);
 
-        // Try auto-match: find resource whose name matches the repo name
+        setStep("manual_select");
+        
+        // Still try to find a suggestion to pre-select it or highlight it
         const repoLower = repoName.toLowerCase();
-        const exactMatch = discovered.find(
-          r => r.name.toLowerCase() === repoLower
+        const match = discovered.find(r => 
+          r.name.toLowerCase() === repoLower || 
+          r.name.toLowerCase().includes(repoLower) || 
+          repoLower.includes(r.name.toLowerCase())
         );
-        const partialMatch = !exactMatch
-          ? discovered.find(
-              r => r.name.toLowerCase().includes(repoLower) || repoLower.includes(r.name.toLowerCase())
-            )
-          : null;
-
-        const match = exactMatch || partialMatch;
-        if (match) {
-          setAutoMatch(match);
-          setStep("auto_matched");
-        } else {
-          setStep("manual_select");
-        }
+        if (match) setSelected(match);
       } catch (err: any) {
         setErrorMsg(err.message || "Failed to discover resources");
         setStep("error");

@@ -7,6 +7,7 @@ import { createFirehoseRoles, deleteFirehoseRoles } from "@/lib/aws/CreateIamRol
 import { createDeliveryStream, deleteDeliveryStream } from "@/lib/aws/CreateFirehose";
 import { subscribeLogGroups, removeSubscriptionFilters } from "@/lib/aws/CreateCloudWatch";
 import { validateCredentials } from "@/lib/aws/ValidateCredentials";
+import { automateEC2Logging } from "@/lib/aws/AutomateEC2Logging";
 
 interface MappingInput {
   repoFullName: string;   // "user/payment-api"
@@ -14,6 +15,30 @@ interface MappingInput {
   resourceId?: string;    // instance ID, ARN, or image name
   resourceType: string;   // "ec2" | "ecs" | "eks" | "lambda" | "log_group"
   resourceLabel?: string; // friendly name
+}
+
+function normalizeLogGroupName(value: string | null | undefined): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  if (!normalized) return null;
+
+  const sentinelValues = new Set(["unknown", "n/a", "na", "none", "null", "undefined"]);
+  if (sentinelValues.has(normalized.toLowerCase())) return null;
+
+  return normalized;
+}
+
+/**
+ * Provisioning step tracking — records which resources were created,
+ * their names/ARNs, and whether each step succeeded or failed.
+ */
+interface ProvisioningStep {
+  step: string;            // "s3" | "iam" | "firehose" | "cloudwatch" | "db"
+  label: string;           // Human-readable label
+  status: "pending" | "success" | "failed" | "skipped";
+  resourceName?: string;   // The actual name/ARN of the created resource
+  error?: string;          // Error message if failed
+  suggestion?: string;     // How to fix it
 }
 
 /**
@@ -28,6 +53,35 @@ export async function POST(req: Request) {
   let identity: any | undefined;
   let uniqueLogGroups: string[] = [];
   let credentialId: string | undefined;
+
+  // Step tracker — initialized as pending
+  const steps: ProvisioningStep[] = [
+    { step: "validate", label: "Validate AWS Credentials", status: "pending" },
+    { step: "s3", label: "Create S3 Log Bucket", status: "pending" },
+    { step: "iam", label: "Create IAM Roles", status: "pending" },
+    { step: "firehose", label: "Create Firehose Delivery Stream", status: "pending" },
+    { step: "cloudwatch", label: "Subscribe CloudWatch Log Groups", status: "pending" },
+    { step: "ec2_agent", label: "Prepare EC2 IAM Permissions", status: "pending" },
+    { step: "db", label: "Save Integration & Mappings", status: "pending" },
+  ];
+
+  const markStep = (
+    stepId: string, 
+    status: ProvisioningStep["status"], 
+    resourceName?: string, 
+    error?: string,
+    suggestion?: string
+  ) => {
+    const s = steps.find(s => s.step === stepId);
+    if (s) {
+      s.status = status;
+      if (resourceName) s.resourceName = resourceName;
+      if (error) s.error = error;
+      if (suggestion) s.suggestion = suggestion;
+    }
+  };
+
+  const getFailedStep = () => steps.find(s => s.status === "failed");
 
   try {
     // 0. Validate Environment Variables
@@ -47,7 +101,7 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     credentialId = body.credentialId;
-    const mappings = body.mappings as MappingInput[];
+    const mappings = body.mappings as (MappingInput & { ownerId?: string })[];
 
     if (!credentialId || !mappings?.length) {
       return NextResponse.json(
@@ -75,30 +129,147 @@ export async function POST(req: Request) {
     const region = credential.region || "us-east-1";
 
     // 1. Validate credentials
-    identity = await validateCredentials(credential);
+    try {
+      identity = await validateCredentials(credential);
+      
+      // Safety Check: Verify that mapped resources belong to this account
+      const mismatch = mappings.find(m => m.ownerId && m.ownerId !== identity.accountId);
+      if (mismatch) {
+        markStep(
+          "validate",
+          "failed",
+          undefined,
+          `Account Mismatch: Resource ${mismatch.resourceId} belongs to account ${mismatch.ownerId}, but your credentials are for account ${identity.accountId}.`,
+          "Please log in to the AWS account that owns your EC2 instances."
+        );
+        throw new Error("Account mismatch detected");
+      }
+
+      markStep("validate", "success", identity.accountId);
+    } catch (err: any) {
+      markStep(
+        "validate", 
+        "failed", 
+        undefined, 
+        err.message, 
+        "Check Access Key ID and Secret Access Key. Ensure the user has 'sts:GetCallerIdentity' permissions."
+      );
+      throw err;
+    }
 
     // 2. Create S3 bucket
-    bucketName = await createLogBucket(credential, user.id);
-    createdResources.push("s3");
+    try {
+      bucketName = await createLogBucket(credential, user.id);
+      createdResources.push("s3");
+      markStep("s3", "success", bucketName);
+    } catch (err: any) {
+      markStep(
+        "s3", 
+        "failed", 
+        undefined, 
+        err.message, 
+        "Check S3 permissions (s3:CreateBucket) or verify if the bucket name is globally unique."
+      );
+      throw err;
+    }
 
     // 3. Create IAM Roles
-    const { firehoseRoleArn, cwRoleArn } = await createFirehoseRoles(
-      credential, bucketName, identity.accountId, region
-    );
-    createdResources.push("iam");
+    let firehoseRoleArn = "";
+    let cwRoleArn = "";
+    try {
+      const roles = await createFirehoseRoles(
+        credential, bucketName, identity.accountId, region
+      );
+      firehoseRoleArn = roles.firehoseRoleArn;
+      cwRoleArn = roles.cwRoleArn;
+      createdResources.push("iam");
+      markStep("iam", "success", `FirehoseRole, CloudWatchRole (${region})`);
+    } catch (err: any) {
+      markStep(
+        "iam", 
+        "failed", 
+        undefined, 
+        err.message, 
+        "Ensure permissions for 'iam:CreateRole', 'iam:PutRolePolicy', and 'iam:GetRole'."
+      );
+      throw err;
+    }
 
     // 4. Create Firehose delivery stream
-    const firehoseArn = await createDeliveryStream(
-      credential, user.id, firehoseRoleArn, bucketName, ingestUrl
-    );
-    createdResources.push("firehose");
+    let firehoseArn = "";
+    try {
+      firehoseArn = await createDeliveryStream(
+        credential, user.id, firehoseRoleArn, bucketName, ingestUrl
+      );
+      createdResources.push("firehose");
+      markStep("firehose", "success", `AutoSRE-LogStream-${user.id}-${region}`);
+    } catch (err: any) {
+      markStep(
+        "firehose", 
+        "failed", 
+        `AutoSRE-LogStream-${user.id}-${region}`, 
+        err.message,
+        "Check permissions for 'firehose:CreateDeliveryStream'. This can also fail if the IAM roles from the previous step haven't propagated yet."
+      );
+      throw err;
+    }
 
     // 5. Subscribe ONLY the selected log groups
-    uniqueLogGroups = [...new Set(mappings.map(m => m.logGroupName))];
-    const subscribedGroups = await subscribeLogGroups(
-      credential, firehoseArn, cwRoleArn, uniqueLogGroups
-    );
-    createdResources.push("cloudwatch");
+    uniqueLogGroups = [
+      ...new Set(
+        mappings
+          .map((m) => normalizeLogGroupName(m.logGroupName))
+          .filter((g): g is string => Boolean(g))
+      ),
+    ];
+    
+    if (uniqueLogGroups.length === 0) {
+      console.log("[AWS] No valid log groups to subscribe.");
+      createdResources.push("cloudwatch");
+      markStep("cloudwatch", "success", "No log groups selected/available");
+    } else {
+      try {
+        const { subscribed, failed } = await subscribeLogGroups(
+          credential, firehoseArn, cwRoleArn, uniqueLogGroups
+        );
+      
+      if (failed.length > 0) {
+        const missingLogGroups = failed.filter(
+          (f) => f.code === "ResourceNotFoundException" || /does not exist/i.test(f.error)
+        );
+        const blockingFailures = failed.filter((f) => !missingLogGroups.includes(f));
+
+        if (blockingFailures.length > 0) {
+          const hasLimitError = blockingFailures.some(f => f.code === "LimitExceededException");
+          const errorMessage = `${subscribed.length} subscribed, ${blockingFailures.length} failed. First error: ${blockingFailures[0].error}`;
+          const suggestion = hasLimitError 
+            ? "One or more log groups have 2 subscription filters. Remove one in the AWS Console and try again."
+            : "Check IAM permissions for 'logs:PutSubscriptionFilter'.";
+            
+          markStep("cloudwatch", "failed", uniqueLogGroups.join(", "), errorMessage, suggestion);
+          throw new Error(errorMessage);
+        }
+
+        const skippedNames = missingLogGroups.map((f) => f.name).join(", ");
+        createdResources.push("cloudwatch");
+        markStep(
+          "cloudwatch",
+          "skipped",
+          subscribed.join(", ") || skippedNames || uniqueLogGroups.join(", "),
+          `${missingLogGroups.length} selected log group(s) were not found and were skipped.`,
+          "Verify that selected resources are writing to CloudWatch Logs in this region, then retry provisioning."
+        );
+      } else {
+        createdResources.push("cloudwatch");
+        markStep("cloudwatch", "success", uniqueLogGroups.join(", "));
+      }
+    } catch (err: any) {
+      if (steps.find(s => s.step === "cloudwatch")?.status !== "failed") {
+        markStep("cloudwatch", "failed", uniqueLogGroups.join(", "), err.message);
+      }
+      throw err;
+    }
+    }
 
     // 6. Save Integration record
     const integration = await prisma.integration.upsert({
@@ -175,13 +346,37 @@ export async function POST(req: Request) {
           resourceLabel: mapping.resourceLabel,
         },
       });
+
+      // 7.3 Automate EC2 Logging if applicable
+      if (mapping.resourceType === "ec2" && mapping.resourceId) {
+        try {
+          markStep("ec2_agent", "pending", `Configuring ${mapping.resourceId}...`);
+          await automateEC2Logging(credential, mapping.resourceId, mapping.logGroupName, region, identity.accountId);
+          markStep("ec2_agent", "success", `Configured ${mapping.resourceId}`);
+        } catch (err: any) {
+          console.error(`[AWS] Automation failed for ${mapping.resourceId}:`, err.message);
+          markStep(
+            "ec2_agent",
+            "failed",
+            mapping.resourceId,
+            err.message,
+            "Ensure the instance is online, has SSM agent installed, and your IAM credentials have 'ssm:SendCommand' permissions."
+          );
+          // We don't throw here to allow other mappings to succeed, 
+          // but we mark the step as failed so the user knows.
+        }
+      }
+    }
+
+    if (steps.find(s => s.step === "ec2_agent")?.status === "pending") {
+      markStep("ec2_agent", "success", "No EC2 instances to configure");
     }
 
     return NextResponse.json({
       success: true,
       integrationId: integration.id,
       bucketName,
-      subscribedGroups,
+      subscribedLogGroups: uniqueLogGroups,
       mappingCount: mappings.length,
     });
   } catch (error: any) {
@@ -191,15 +386,15 @@ export async function POST(req: Request) {
     try {
       if (credentialId) {
         const user = await prisma.user.findFirst({
-           where: { cloudCredentials: { some: { id: credentialId } } }
+          where: { cloudCredentials: { some: { id: credentialId } } }
         });
         const credential = await prisma.cloudCredential.findUnique({ where: { id: credentialId } });
 
         if (credential && user) {
           const region = credential.region || "us-east-1";
-          
+
           console.log("Initiating automatic rollback of AWS resources...");
-          
+
           if (createdResources.includes("cloudwatch") && uniqueLogGroups.length > 0) {
             await removeSubscriptionFilters(credential, uniqueLogGroups);
           }
@@ -212,14 +407,14 @@ export async function POST(req: Request) {
           if (createdResources.includes("s3") && bucketName) {
             await deleteLogBucket(credential, bucketName);
           }
-          
+
           console.log("Rollback completed.");
         }
       }
     } catch (rollbackError) {
       console.error("Rollback failed:", rollbackError);
     }
-    
+
     // Update integration status to failed
     try {
       const session = await getServerSession(authOptions);

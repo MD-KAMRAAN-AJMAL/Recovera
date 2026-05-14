@@ -22,6 +22,7 @@ export async function createLogBucket(credential: CloudCredential, userId: strin
         credentials: {
             accessKeyId: decrypt(credential.accessKeyId),
             secretAccessKey: decrypt(credential.secretAccessKey),
+            ...(credential.sessionToken && { sessionToken: decrypt(credential.sessionToken) })
         },
     });
 
@@ -51,6 +52,7 @@ export async function deleteLogBucket(credential: CloudCredential, bucketName: s
         credentials: {
             accessKeyId: decrypt(credential.accessKeyId),
             secretAccessKey: decrypt(credential.secretAccessKey),
+            ...(credential.sessionToken && { sessionToken: decrypt(credential.sessionToken) })
         },
     });
 
