@@ -1,0 +1,81 @@
+name: ✨ Feature Request
+description: Suggest a new feature or improvement for Recovera
+title: "[Feature]: "
+labels: ["enhancement"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a great idea for Recovera? We'd love to hear it! Please provide as much detail as possible.
+
+  - type: checkboxes
+    id: existing-issue
+    attributes:
+      label: Pre-flight Checklist
+      options:
+        - label: I have searched existing issues and this feature has not been requested yet.
+          required: true
+
+  - type: textarea
+    id: problem-statement
+    attributes:
+      label: 🤔 Problem Statement
+      description: Is your feature request related to a problem? Describe it clearly.
+      placeholder: I'm always frustrated when...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: 💡 Proposed Solution
+      description: Describe the solution or feature you'd like to see.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: 🗂️ Feature Area
+      options:
+        - Ingestion / Log Pipeline
+        - Anomaly Detection
+        - AI Root Cause Analysis (RCA)
+        - Safety / Policy Engine
+        - Auto-Remediation / PR Generation
+        - Dashboard / UI
+        - AWS Integration
+        - GitHub Integration
+        - Multi-cloud (GCP / Azure)
+        - RAG / Context Retrieval
+        - Chat-with-SRE Assistant
+        - Developer Experience / Tooling
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: 📊 Priority
+      options:
+        - Low — Nice to have
+        - Medium — Would improve workflow
+        - High — Blocking or critical
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 🔄 Alternatives Considered
+      description: Describe any alternative solutions or workarounds you've considered.
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 📋 Additional Context
+      description: Add any mockups, diagrams, or additional context here.
