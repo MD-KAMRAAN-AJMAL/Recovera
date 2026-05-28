@@ -78,4 +78,9 @@ body:
     id: additional-context
     attributes:
       label: 📋 Additional Context
-      description: Add any mockups, diagrams, or additional context here.
+      description: Add any mockups, diagrams, or additional context here.  - type: checkboxes
+    id: gssoc
+    attributes:
+      label: GSSoC '26
+      options:
+        - label: I am contributing under GSSoC '26

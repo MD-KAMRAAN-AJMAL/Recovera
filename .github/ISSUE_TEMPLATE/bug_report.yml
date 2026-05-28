@@ -101,4 +101,9 @@ body:
     id: additional-context
     attributes:
       label: 📋 Additional Context
-      description: Any other context about the problem.
+      description: Any other context about the problem.  - type: checkboxes
+    id: gssoc
+    attributes:
+      label: GSSoC '26
+      options:
+        - label: I am contributing under GSSoC '26
