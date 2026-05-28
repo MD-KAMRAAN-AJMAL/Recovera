@@ -39,7 +39,9 @@ body:
     id: suggested-change
     attributes:
       label: ✏️ Suggested Change
-      description: What should the documentation say instead?  - type: checkboxes
+      description: What should the documentation say instead? 
+       
+  - type: checkboxes
     id: gssoc
     attributes:
       label: GSSoC '26
