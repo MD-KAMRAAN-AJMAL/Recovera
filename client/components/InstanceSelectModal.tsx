@@ -56,12 +56,13 @@ export default function InstanceSelectModal({
   // On open, discover resources and try auto-match
   useEffect(() => {
     if (!isOpen || !credentialId) return;
-    setStep("discovering");
-    setAutoMatch(null);
-    setSelected(null);
-    setSearchQuery("");
 
     (async () => {
+      setStep("discovering");
+      setAutoMatch(null);
+      setSelected(null);
+      setSearchQuery("");
+
       try {
         const res = await fetch(
           `/api/integration/discover?credentialId=${encodeURIComponent(credentialId)}`,

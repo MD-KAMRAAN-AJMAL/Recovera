@@ -94,6 +94,7 @@ export default function RepoDashboard({ repoName }: { repoName: string }) {
 
   useEffect(() => {
     const fetchIncidents = async () => {
+      setLoadingIncidents(true);
       try {
         const res = await fetch(`/api/incidents?repoFullName=${encodeURIComponent(repoName)}`);
         const data = await res.json();
@@ -106,7 +107,6 @@ export default function RepoDashboard({ repoName }: { repoName: string }) {
       }
     };
 
-    setLoadingIncidents(true);
     fetchIncidents();
     
     // Poll every 5 minutes to avoid constant refresh

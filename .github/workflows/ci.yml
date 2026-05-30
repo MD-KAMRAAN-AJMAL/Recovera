@@ -18,13 +18,19 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: client/package-lock.json
 
       - name: Install dependencies
         working-directory: client
         run: npm ci
+
+      - name: Generate Prisma Client
+        working-directory: client
+        run: npx prisma generate
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/recovera_test
 
       - name: Run ESLint
         working-directory: client
@@ -46,7 +52,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: client/package-lock.json
 
@@ -67,3 +73,4 @@ jobs:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/recovera_test
           NEXTAUTH_SECRET: ci-test-secret
           NEXTAUTH_URL: http://localhost:3000
+          ENCRYPTION_KEY: 0000000000000000000000000000000000000000000000000000000000000000

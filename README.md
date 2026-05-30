@@ -129,7 +129,7 @@ Recovera/
 ## 🚀 Installation
 
 ### Prerequisites
-- **Node.js**: v18.x or higher
+- **Node.js**: v22.12 or higher
 - **PostgreSQL**: v14+ (or Supabase/Neon)
 - **Redis**: For background job processing
 - **AWS Account**: With IAM permissions for resource discovery
