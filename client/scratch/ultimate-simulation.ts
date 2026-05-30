@@ -129,7 +129,7 @@ if (typeof AbortController === 'undefined') {
     });
     await prisma.incident.update({
       where: { id: incident.id },
-      data: { status: "RESOLVED" }
+      data: { status: "CLOSED" }
     });
   } else {
     console.error(`❌ PR Failed: ${prResult.error}`);

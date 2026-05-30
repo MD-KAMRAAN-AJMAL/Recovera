@@ -8,6 +8,7 @@ import { createDeliveryStream, deleteDeliveryStream } from "@/lib/aws/CreateFire
 import { subscribeLogGroups, removeSubscriptionFilters } from "@/lib/aws/CreateCloudWatch";
 import { validateCredentials } from "@/lib/aws/ValidateCredentials";
 import { automateEC2Logging } from "@/lib/aws/AutomateEC2Logging";
+import { ingestRepository } from "@/lib/retrieval/ingestionService";
 
 interface MappingInput {
   repoFullName: string;   // "user/payment-api"
@@ -320,7 +321,32 @@ export async function POST(req: Request) {
         },
       });
 
+      // 7.1.1 Trigger background RAG ingestion for the newly connected repository.
+      // We use a detached promise so the provisioning response is not delayed.
+      // The GitHub token comes from the current session (OAuth access token).
+      const githubToken = (session as any).accessToken as string | undefined;
+      if (githubToken) {
+        (async () => {
+          try {
+            // Only index if not already indexed
+            const existingIndex = await prisma.repositoryIndex.findUnique({
+              where: { repoFullName: mapping.repoFullName },
+              select: { status: true },
+            });
+
+            if (existingIndex?.status !== 'indexed') {
+              console.log(`[Ingestion] Triggering background ingestion for ${mapping.repoFullName}...`);
+              await ingestRepository(mapping.repoFullName, githubToken);
+            }
+          } catch (ingestionError) {
+            // Non-fatal — ingestion failures should never block provisioning
+            console.error(`[Ingestion] Background ingestion failed for ${mapping.repoFullName}:`, ingestionError);
+          }
+        })();
+      }
+
       // 7.2 Create/Update mapping
+
       await prisma.instanceMapping.upsert({
         where: {
           integrationId_logGroupName_resourceId: {
