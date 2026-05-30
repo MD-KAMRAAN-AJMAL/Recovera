@@ -8,6 +8,7 @@ import { createDeliveryStream, deleteDeliveryStream } from "@/lib/aws/CreateFire
 import { subscribeLogGroups, removeSubscriptionFilters } from "@/lib/aws/CreateCloudWatch";
 import { validateCredentials } from "@/lib/aws/ValidateCredentials";
 import { automateEC2Logging } from "@/lib/aws/AutomateEC2Logging";
+import { ingestRepository } from "@/lib/retrieval/ingestionService";
 
 interface MappingInput {
   repoFullName: string;   // "user/payment-api"
@@ -157,118 +158,133 @@ export async function POST(req: Request) {
       throw err;
     }
 
-    // 2. Create S3 bucket
-    try {
-      bucketName = await createLogBucket(credential, user.id);
-      createdResources.push("s3");
-      markStep("s3", "success", bucketName);
-    } catch (err: any) {
-      markStep(
-        "s3", 
-        "failed", 
-        undefined, 
-        err.message, 
-        "Check S3 permissions (s3:CreateBucket) or verify if the bucket name is globally unique."
-      );
-      throw err;
-    }
-
-    // 3. Create IAM Roles
+    // 2. Create AWS Resources (S3, IAM, Firehose, CloudWatch) or mock them if AGENT_MOCK is enabled
     let firehoseRoleArn = "";
     let cwRoleArn = "";
-    try {
-      const roles = await createFirehoseRoles(
-        credential, bucketName, identity.accountId, region
-      );
-      firehoseRoleArn = roles.firehoseRoleArn;
-      cwRoleArn = roles.cwRoleArn;
-      createdResources.push("iam");
-      markStep("iam", "success", `FirehoseRole, CloudWatchRole (${region})`);
-    } catch (err: any) {
-      markStep(
-        "iam", 
-        "failed", 
-        undefined, 
-        err.message, 
-        "Ensure permissions for 'iam:CreateRole', 'iam:PutRolePolicy', and 'iam:GetRole'."
-      );
-      throw err;
-    }
-
-    // 4. Create Firehose delivery stream
     let firehoseArn = "";
-    try {
-      firehoseArn = await createDeliveryStream(
-        credential, user.id, firehoseRoleArn, bucketName, ingestUrl
-      );
-      createdResources.push("firehose");
-      markStep("firehose", "success", `AutoSRE-LogStream-${user.id}-${region}`);
-    } catch (err: any) {
-      markStep(
-        "firehose", 
-        "failed", 
-        `AutoSRE-LogStream-${user.id}-${region}`, 
-        err.message,
-        "Check permissions for 'firehose:CreateDeliveryStream'. This can also fail if the IAM roles from the previous step haven't propagated yet."
-      );
-      throw err;
-    }
 
-    // 5. Subscribe ONLY the selected log groups
-    uniqueLogGroups = [
-      ...new Set(
-        mappings
-          .map((m) => normalizeLogGroupName(m.logGroupName))
-          .filter((g): g is string => Boolean(g))
-      ),
-    ];
-    
-    if (uniqueLogGroups.length === 0) {
-      console.log("[AWS] No valid log groups to subscribe.");
-      createdResources.push("cloudwatch");
-      markStep("cloudwatch", "success", "No log groups selected/available");
+    if (process.env.AGENT_MOCK === "true") {
+      console.log("[AWS] Mock mode active: bypassing AWS infrastructure provisioning.");
+      bucketName = `autosre-mock-bucket-${user.id}`;
+      firehoseArn = `arn:aws:firehose:${region}:123456789012:deliverystream/AutoSRE-LogStream-Mock`;
+      createdResources.push("s3", "iam", "firehose", "cloudwatch");
+      markStep("validate", "success", "123456789012");
+      markStep("s3", "success", bucketName);
+      markStep("iam", "success", `FirehoseRole, CloudWatchRole (${region})`);
+      markStep("firehose", "success", `AutoSRE-LogStream-Mock-${region}`);
+      markStep("cloudwatch", "success", "Mock Log Groups Subscribed");
+      markStep("ec2_agent", "success", "Mock EC2 Agent Subscribed");
     } else {
+      // 2. Create S3 bucket
       try {
-        const { subscribed, failed } = await subscribeLogGroups(
-          credential, firehoseArn, cwRoleArn, uniqueLogGroups
-        );
-      
-      if (failed.length > 0) {
-        const missingLogGroups = failed.filter(
-          (f) => f.code === "ResourceNotFoundException" || /does not exist/i.test(f.error)
-        );
-        const blockingFailures = failed.filter((f) => !missingLogGroups.includes(f));
-
-        if (blockingFailures.length > 0) {
-          const hasLimitError = blockingFailures.some(f => f.code === "LimitExceededException");
-          const errorMessage = `${subscribed.length} subscribed, ${blockingFailures.length} failed. First error: ${blockingFailures[0].error}`;
-          const suggestion = hasLimitError 
-            ? "One or more log groups have 2 subscription filters. Remove one in the AWS Console and try again."
-            : "Check IAM permissions for 'logs:PutSubscriptionFilter'.";
-            
-          markStep("cloudwatch", "failed", uniqueLogGroups.join(", "), errorMessage, suggestion);
-          throw new Error(errorMessage);
-        }
-
-        const skippedNames = missingLogGroups.map((f) => f.name).join(", ");
-        createdResources.push("cloudwatch");
+        bucketName = await createLogBucket(credential, user.id);
+        createdResources.push("s3");
+        markStep("s3", "success", bucketName);
+      } catch (err: any) {
         markStep(
-          "cloudwatch",
-          "skipped",
-          subscribed.join(", ") || skippedNames || uniqueLogGroups.join(", "),
-          `${missingLogGroups.length} selected log group(s) were not found and were skipped.`,
-          "Verify that selected resources are writing to CloudWatch Logs in this region, then retry provisioning."
+          "s3", 
+          "failed", 
+          undefined, 
+          err.message, 
+          "Check S3 permissions (s3:CreateBucket) or verify if the bucket name is globally unique."
         );
-      } else {
+        throw err;
+      }
+
+      // 3. Create IAM Roles
+      try {
+        const roles = await createFirehoseRoles(
+          credential, bucketName, identity.accountId, region
+        );
+        firehoseRoleArn = roles.firehoseRoleArn;
+        cwRoleArn = roles.cwRoleArn;
+        createdResources.push("iam");
+        markStep("iam", "success", `FirehoseRole, CloudWatchRole (${region})`);
+      } catch (err: any) {
+        markStep(
+          "iam", 
+          "failed", 
+          undefined, 
+          err.message, 
+          "Ensure permissions for 'iam:CreateRole', 'iam:PutRolePolicy', and 'iam:GetRole'."
+        );
+        throw err;
+      }
+
+      // 4. Create Firehose delivery stream
+      try {
+        firehoseArn = await createDeliveryStream(
+          credential, user.id, firehoseRoleArn, bucketName, ingestUrl
+        );
+        createdResources.push("firehose");
+        markStep("firehose", "success", `AutoSRE-LogStream-${user.id}-${region}`);
+      } catch (err: any) {
+        markStep(
+          "firehose", 
+          "failed", 
+          `AutoSRE-LogStream-${user.id}-${region}`, 
+          err.message,
+          "Check permissions for 'firehose:CreateDeliveryStream'. This can also fail if the IAM roles from the previous step haven't propagated yet."
+        );
+        throw err;
+      }
+
+      // 5. Subscribe ONLY the selected log groups
+      uniqueLogGroups = [
+        ...new Set(
+          mappings
+            .map((m) => normalizeLogGroupName(m.logGroupName))
+            .filter((g): g is string => Boolean(g))
+        ),
+      ];
+      
+      if (uniqueLogGroups.length === 0) {
+        console.log("[AWS] No valid log groups to subscribe.");
         createdResources.push("cloudwatch");
-        markStep("cloudwatch", "success", uniqueLogGroups.join(", "));
+        markStep("cloudwatch", "success", "No log groups selected/available");
+      } else {
+        try {
+          const { subscribed, failed } = await subscribeLogGroups(
+            credential, firehoseArn, cwRoleArn, uniqueLogGroups
+          );
+        
+        if (failed.length > 0) {
+          const missingLogGroups = failed.filter(
+            (f) => f.code === "ResourceNotFoundException" || /does not exist/i.test(f.error)
+          );
+          const blockingFailures = failed.filter((f) => !missingLogGroups.includes(f));
+
+          if (blockingFailures.length > 0) {
+            const hasLimitError = blockingFailures.some(f => f.code === "LimitExceededException");
+            const errorMessage = `${subscribed.length} subscribed, ${blockingFailures.length} failed. First error: ${blockingFailures[0].error}`;
+            const suggestion = hasLimitError 
+              ? "One or more log groups have 2 subscription filters. Remove one in the AWS Console and try again."
+              : "Check IAM permissions for 'logs:PutSubscriptionFilter'.";
+              
+            markStep("cloudwatch", "failed", uniqueLogGroups.join(", "), errorMessage, suggestion);
+            throw new Error(errorMessage);
+          }
+
+          const skippedNames = missingLogGroups.map((f) => f.name).join(", ");
+          createdResources.push("cloudwatch");
+          markStep(
+            "cloudwatch",
+            "skipped",
+            subscribed.join(", ") || skippedNames || uniqueLogGroups.join(", "),
+            `${missingLogGroups.length} selected log group(s) were not found and were skipped.`,
+            "Verify that selected resources are writing to CloudWatch Logs in this region, then retry provisioning."
+          );
+        } else {
+          createdResources.push("cloudwatch");
+          markStep("cloudwatch", "success", uniqueLogGroups.join(", "));
+        }
+      } catch (err: any) {
+        if (steps.find(s => s.step === "cloudwatch")?.status !== "failed") {
+          markStep("cloudwatch", "failed", uniqueLogGroups.join(", "), err.message);
+        }
+        throw err;
       }
-    } catch (err: any) {
-      if (steps.find(s => s.step === "cloudwatch")?.status !== "failed") {
-        markStep("cloudwatch", "failed", uniqueLogGroups.join(", "), err.message);
       }
-      throw err;
-    }
     }
 
     // 6. Save Integration record
@@ -320,7 +336,32 @@ export async function POST(req: Request) {
         },
       });
 
+      // 7.1.1 Trigger background RAG ingestion for the newly connected repository.
+      // We use a detached promise so the provisioning response is not delayed.
+      // The GitHub token comes from the current session (OAuth access token).
+      const githubToken = (session as any).accessToken as string | undefined;
+      if (githubToken) {
+        (async () => {
+          try {
+            // Only index if not already indexed
+            const existingIndex = await prisma.repositoryIndex.findUnique({
+              where: { repoFullName: mapping.repoFullName },
+              select: { status: true },
+            });
+
+            if (existingIndex?.status !== 'indexed') {
+              console.log(`[Ingestion] Triggering background ingestion for ${mapping.repoFullName}...`);
+              await ingestRepository(mapping.repoFullName, githubToken);
+            }
+          } catch (ingestionError) {
+            // Non-fatal — ingestion failures should never block provisioning
+            console.error(`[Ingestion] Background ingestion failed for ${mapping.repoFullName}:`, ingestionError);
+          }
+        })();
+      }
+
       // 7.2 Create/Update mapping
+
       await prisma.instanceMapping.upsert({
         where: {
           integrationId_logGroupName_resourceId: {
