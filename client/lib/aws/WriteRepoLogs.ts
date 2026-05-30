@@ -8,6 +8,12 @@ interface TaggedLogBatch {
   logs: any[];            // array of log entries for this repo
 }
 
+interface WriteRepoLogResult {
+  repo: string;
+  key: string;
+  logCount: number;
+}
+
 /**
  * Writes tagged log batches to per-repo S3 folders.
  * 
@@ -37,7 +43,7 @@ export async function writeRepoLogs(
   const day = String(now.getUTCDate()).padStart(2, "0");
   const timestamp = now.getTime();
 
-  const results = [];
+  const results: WriteRepoLogResult[] = [];
 
   for (const batch of batches) {
     if (!batch.logs.length) continue;

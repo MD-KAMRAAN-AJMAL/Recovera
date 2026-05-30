@@ -127,8 +127,11 @@ export default function AILiveFeed({ repoFullName, onIssueDetected, onPRCreated 
     // Clear any previous simulation
     timersRef.current.forEach(clearTimeout);
     timersRef.current = [];
-    setActivities([]);
-    issueTriggeredRef.current = false;
+    const resetTimer = setTimeout(() => {
+      setActivities([]);
+      issueTriggeredRef.current = false;
+    }, 0);
+    timersRef.current.push(resetTimer);
 
     // Schedule all simulation stages
     SIMULATION_STAGES.forEach((stage, idx) => {
