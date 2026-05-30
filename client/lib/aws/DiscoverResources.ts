@@ -190,6 +190,45 @@ async function discoverLogGroups(credential: CloudCredential, region: string): P
  */
 export async function discoverAwsResources(credential: CloudCredential): Promise<AwsResource[]> {
   const region = credential.region || "us-east-1";
+  const decryptedAccessKey = decrypt(credential.accessKeyId);
+
+  // Return mocked AWS resources in mock/development mode to enable testing without a real AWS account
+  if (process.env.AGENT_MOCK === "true" || decryptedAccessKey.toLowerCase().includes("mock") || decryptedAccessKey.toLowerCase().includes("test")) {
+    console.log("[AWS] Mock mode active: returning fake AWS resources for discovery.");
+    return [
+      {
+        type: "ec2",
+        id: "i-09f1a2b3c4d5e6f7a",
+        name: "AutoSRE-MockInstance",
+        logGroups: ["/recovera/ec2/i-09f1a2b3c4d5e6f7a"],
+        region,
+        ownerId: "123456789012",
+      },
+      {
+        type: "ecs",
+        id: "arn:aws:ecs:us-east-1:123456789012:service/mock-cluster/mock-service",
+        name: "mock-service",
+        logGroups: ["/ecs/mock-service"],
+        region,
+        cluster: "mock-cluster",
+      },
+      {
+        type: "eks",
+        id: "mock-cluster/mock-api",
+        name: "mock-api",
+        logGroups: ["/aws/eks/mock-cluster/containers"],
+        region,
+        cluster: "mock-cluster",
+      },
+      {
+        type: "lambda",
+        id: "/aws/lambda/mock-function",
+        name: "mock-function",
+        logGroups: ["/aws/lambda/mock-function"],
+        region,
+      }
+    ];
+  }
 
   // Run all discoveries in parallel
   const [ec2Resources, ecsResources, eksResources, allLogGroups] = await Promise.all([

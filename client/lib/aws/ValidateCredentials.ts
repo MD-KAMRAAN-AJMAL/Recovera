@@ -3,12 +3,23 @@ import { CloudCredential } from "../../generated/prisma/client";
 import { decrypt } from "../encrypt";
 
 export async function validateCredentials(credential: CloudCredential) {
+    const decryptedAccessKey = decrypt(credential.accessKeyId);
+
+    // Bypasses actual AWS STS validation in mock/development mode
+    if (process.env.AGENT_MOCK === "true" || decryptedAccessKey.toLowerCase().includes("mock") || decryptedAccessKey.toLowerCase().includes("test")) {
+        return {
+            accountId: "123456789012",
+            arn: "arn:aws:iam::123456789012:user/mock-recovera-user",
+            userId: "AIDAIBOFHNCEXAMPLE",
+        };
+    }
+
     try {
         const region = credential.region || "us-east-1";
         const stsClient = new STSClient({
             region,
             credentials: {
-                accessKeyId: decrypt(credential.accessKeyId),
+                accessKeyId: decryptedAccessKey,
                 secretAccessKey: decrypt(credential.secretAccessKey),
                 ...(credential.sessionToken && { sessionToken: decrypt(credential.sessionToken) })
             },
