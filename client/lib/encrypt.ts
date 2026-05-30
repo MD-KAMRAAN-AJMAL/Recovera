@@ -15,15 +15,43 @@ export function encrypt(text: string) {
 }
 
 export function decrypt(text: string) {
-    const [ivHex, encryptedHex] = text.split(":")
-    const iv = Buffer.from(ivHex, "hex")
-    const encryptedText = Buffer.from(encryptedHex, "hex")
+    // 1. Guard against non-string, null, undefined, or empty values
+    if (typeof text !== 'string' || !text) {
+        return '';
+    }
 
-    const decipher = crypto.createDecipheriv(algorithm, key, iv)
-    const decrypted = Buffer.concat([
-        decipher.update(encryptedText),
-        decipher.final(),
-    ])
+    // 2. If it does not contain a colon, it's likely legacy or already plaintext
+    if (!text.includes(':')) {
+        return text;
+    }
 
-    return decrypted.toString()
+    try {
+        const [ivHex, encryptedHex] = text.split(":");
+        
+        // 3. Ensure both parts exist
+        if (!ivHex || !encryptedHex) {
+            return text;
+        }
+
+        // 4. Validate that ivHex is exactly 32 hex characters (16 bytes IV)
+        // and encryptedHex contains only valid hex characters
+        const hexRegex = /^[0-9a-fA-F]+$/;
+        if (ivHex.length !== 32 || !hexRegex.test(ivHex) || !hexRegex.test(encryptedHex)) {
+            return text;
+        }
+
+        const iv = Buffer.from(ivHex, "hex");
+        const encryptedText = Buffer.from(encryptedHex, "hex");
+
+        const decipher = crypto.createDecipheriv(algorithm, key, iv);
+        const decrypted = Buffer.concat([
+            decipher.update(encryptedText),
+            decipher.final(),
+        ]);
+
+        return decrypted.toString();
+    } catch (error) {
+        console.warn("[Decryption Utility] Failed to decrypt, returning original text:", error);
+        return text;
+    }
 }
