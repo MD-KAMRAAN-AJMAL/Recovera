@@ -254,6 +254,7 @@ model SafetyAuditLog {
   createdAt       DateTime @default(now())
 
   @@index([incidentId, createdAt])
+  @@index([createdAt])
 }
 
 model DetectionQueue {
