@@ -58,6 +58,8 @@ Modern engineering teams are overwhelmed by the volume of production signals. Wh
 | **DevOps** | GitHub Actions, Octokit (GitHub API), Docker |
 | **Monitoring** | OpenTelemetry, Prometheus (Roadmap) |
 
+The repository also includes an automated PR review workflow that posts a basic AI-generated review comment on pull requests.
+
 ---
 
 ## 🏗️ Architecture
