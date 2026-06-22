@@ -59,6 +59,7 @@ Modern engineering teams are overwhelmed by the volume of production signals. Wh
 | **Monitoring** | OpenTelemetry, Prometheus (Roadmap) |
 
 The repository also includes an automated PR review workflow that posts a basic AI-generated review comment on pull requests.
+This line exists as a smoke-test change for validating the PR reviewer workflow on a fresh pull request.
 
 ---
 
