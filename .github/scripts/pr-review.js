@@ -5,7 +5,7 @@ async function run() {
   const apiKey = process.env.GEMINI_API_KEY;
   const repository = process.env.GITHUB_REPOSITORY;
   const prNumber = process.env.PR_NUMBER;
-  const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
   if (!githubToken) {
     console.error('Error: GITHUB_TOKEN environment variable is not set.');
